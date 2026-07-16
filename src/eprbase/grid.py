@@ -195,12 +195,12 @@ class Grid:
         # Coordinates without Voronoi border points
         if octants != 4 and octants != 8:
             for k in range(1, M + 1):
-                for l in range(0, octants * k + border):
+                for column in range(0, octants * k + border):
                     t = (k / M) * (np.pi / 2)
-                    p = (l / (octants * k)) * phi_max
+                    p = (column / (octants * k)) * phi_max
 
                     if border:
-                        if l == 0 or l == octants * k:
+                        if column == 0 or column == octants * k:
                             weight = 0.5
                         else:
                             weight = 1.0
@@ -216,9 +216,9 @@ class Grid:
 
         else:
             for k in range(1, M + 1):
-                for l in range(0, 4 * k):
+                for column in range(0, 4 * k):
                     t = (k / M) * (np.pi / 2)
-                    p = (l / (4 * k)) * phi_max
+                    p = (column / (4 * k)) * phi_max
 
                     if k == M and octants == 4:
                         weight = 0.5
@@ -254,26 +254,26 @@ class Grid:
                     lb = -(max_points - n_points - 1 - border)
                 else:
                     lb = -1
-                for l in range(lb, octants * k + 1 + border):
-                    if k != M + 1 and l > -1 and l < octants * k + border:
+                for column in range(lb, octants * k + 1 + border):
+                    if k != M + 1 and column > -1 and column < octants * k + border:
                         continue
                     elif k != M + 1:
                         t = (k / M) * (np.pi / 2)
-                        p = (l / (octants * k)) * phi_max
+                        p = (column / (octants * k)) * phi_max
                     else:
-                        if l > (k - 2) * octants + border:
+                        if column > (k - 2) * octants + border:
                             continue
                         t = (k / M) * (np.pi / 2)
-                        p = (l / (octants * (M - 1))) * phi_max
+                        p = (column / (octants * (M - 1))) * phi_max
 
                     theta.append(t)
                     phi.append(p)
 
         elif octants == 4:
             k = M - 1
-            for l in range(0, 4 * k):
+            for column in range(0, 4 * k):
                 t = np.pi - (k / M) * (np.pi / 2)
-                p = (l / (octants * k)) * phi_max
+                p = (column / (octants * k)) * phi_max
 
                 theta.append(t)
                 phi.append(p)
@@ -318,17 +318,17 @@ class Grid:
             Spherical coordinates of the grid. (Radius, Elevation, Azimuth).
 
         """
-        k, l = np.tril_indices(M + 1)
+        k, column = np.tril_indices(M + 1)
         theta_a = (k / M) * (np.pi / 2)
-        phi_a = (l / k) * (np.pi / 2)
+        phi_a = (column / k) * (np.pi / 2)
         phi_a = np.nan_to_num(phi_a, nan=np.pi / 2)
 
-        theta_b = ((M - l) / M) * (np.pi / 2)
-        phi_b = ((k - l) / (M - l)) * (np.pi / 2)
+        theta_b = ((M - column) / M) * (np.pi / 2)
+        phi_b = ((k - column) / (M - column)) * (np.pi / 2)
         phi_b = np.nan_to_num(phi_b, nan=np.pi / 2)
 
-        theta_c = ((M - k + l) / M) * (np.pi / 2)
-        phi_c = ((M - k) / (M - k + l)) * (np.pi / 2)
+        theta_c = ((M - k + column) / M) * (np.pi / 2)
+        phi_c = ((M - k) / (M - k + column)) * (np.pi / 2)
         phi_c = np.nan_to_num(phi_c, nan=np.pi / 2)
 
         x_a = np.sin(theta_a) * np.cos(phi_a)
@@ -383,7 +383,7 @@ class Grid:
 
         return areas[: self._grid[:, 0].size]
 
-    def _get_grid_params(self) -> [float, int, bool]:
+    def _get_grid_params(self) -> list[float, int, bool]:
         point_group = [
             "C1",
             "Ci",
@@ -428,7 +428,6 @@ class Grid:
         M = self._points
 
         # u, v are parameterisation variables
-        r = self._grid[:, 0]
         u = self._grid[:, 1]
         v = self._grid[:, 2]
 

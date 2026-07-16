@@ -55,7 +55,7 @@ class ResonanceFields:
 
         self._testing = testing
 
-    def get_res_fields(self) -> [cp.array, cp.array, cp.array, cp.array]:
+    def get_res_fields(self) -> list[cp.array, cp.array, cp.array, cp.array]:
         """
         Get the resonance fields.
 
@@ -258,7 +258,7 @@ class ResonanceFields:
 
     def _get_single_res_fields(
         self, grid_point: int
-    ) -> [cp.array, cp.array, cp.array, cp.array]:
+    ) -> list[cp.array, cp.array, cp.array, cp.array]:
         """
         Get the resonance fields for one grid point.
 
@@ -577,7 +577,7 @@ class ResonanceFields:
         intensities: list,
         widths: list,
         transition: list,
-    ) -> [list, list, list, list]:
+    ) -> list[list, list, list, list]:
         """
         Sanitize the results.
 
@@ -669,7 +669,6 @@ class ResonanceFields:
         starts[:, 0] = 0
 
         for i in range(mask.size):
-            trans = self._transitions[i]
             treshold_reached = False
             j = 0
             while not treshold_reached and j < transition_count.shape[0]:
@@ -746,7 +745,7 @@ class ResonanceFields:
         intensities: cp.array,
         delta_E: CubicHermiteSpline,
         transitions: cp.array,
-    ) -> [cp.array, cp.array, cp.array]:
+    ) -> list[cp.array, cp.array, cp.array]:
         """
         Filter transitions by their intensity.
 
@@ -783,7 +782,7 @@ class ResonanceFields:
         intensities: cp.array,
         delta_E: CubicHermiteSpline,
         transitions: cp.array,
-    ) -> [cp.array, cp.array, cp.array]:
+    ) -> list[cp.array, cp.array, cp.array]:
         # TODO: max_spread einführen!
         """
         Filter transitions by their field position.
@@ -889,7 +888,9 @@ class ResonanceFields:
         """
         return cp.linspace(2 * n_angles, 3 * n_angles - 1, n_angles, dtype=cp.uint32)
 
-    def _get_start_points(self, theta: cp.array, phi: cp.array) -> [cp.array, cp.array]:
+    def _get_start_points(
+        self, theta: cp.array, phi: cp.array
+    ) -> list[cp.array, cp.array]:
         """
         Get the eigenvalues and eigenvectors for the initial points.
 
@@ -1117,7 +1118,9 @@ class ResonanceFields:
         else:
             self._n_new_centers[:] = 0
 
-    def _evaluate_segments(self, values: cp.array, theta, phi) -> [cp.array, cp.array]:
+    def _evaluate_segments(
+        self, values: cp.array, theta, phi
+    ) -> list[cp.array, cp.array]:
         """
         Evaluate all segments.
 
@@ -1172,7 +1175,7 @@ class ResonanceFields:
 
     def _adaptive_spline(
         self, theta: cp.array, phi: cp.array
-    ) -> [CubicHermiteSpline, object, object]:
+    ) -> list[CubicHermiteSpline, object, object]:
         """
         Get a cubic spline representation for each energy level.
 
@@ -1294,7 +1297,7 @@ class ResonanceFields:
         theta: cp.array,
         phi: cp.array,
         n_points: cp.array,
-    ) -> [cp.array, tuple[cp.array, cp.array]]:
+    ) -> list[cp.array, tuple[cp.array, cp.array]]:
         """
         Get the energies and gradients for the given field points.
 

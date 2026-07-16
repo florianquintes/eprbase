@@ -151,7 +151,7 @@ class Spectra:
             cp.array(self._widths, dtype=CUPY_FLOAT).flatten()[sorting].reshape(shp)
         )
 
-    def _get_points_for_projection(self) -> [cp.array, cp.array, cp.array]:
+    def _get_points_for_projection(self) -> list[cp.array, cp.array, cp.array]:
         """
         Get the intensities, resonance fields and linewidths for each triangle.
 
@@ -206,7 +206,7 @@ class Spectra:
         print(heigth.min(), heigth.max())
         print(widths.shape)
         print(triangles.shape)
-        sigma = widths.mean(axis=2)
+        # sigma = widths.mean(axis=2)
         n = 0
         for i in range(triangles.shape[0]):
             for j in range(triangles.shape[1]):

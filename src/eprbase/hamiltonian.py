@@ -9,7 +9,6 @@
 """
 
 import numpy as np
-import scipy as sp
 from functools import cache
 
 
@@ -147,15 +146,15 @@ class Hamiltonian:
         spin_matrices = self._get_coupled_spin_matrices(0.5, 0.5, *spin)
         S1 = spin_matrices[0]
         S2 = spin_matrices[1]
-        I = spin_matrices[2:]
+        I_ = spin_matrices[2:]
 
-        self._SI = np.zeros((I.shape[0], 3, 3, *S1[0].shape), dtype=np.complex128)
-        path, _ = np.einsum_path("ikl, jlm-> ijkm", S1, I[0], optimize=True)
+        self._SI = np.zeros((I_.shape[0], 3, 3, *S1[0].shape), dtype=np.complex128)
+        path, _ = np.einsum_path("ikl, jlm-> ijkm", S1, I_[0], optimize=True)
         for i in range(acc_len):
-            self._SI[i] = np.einsum("ikl, jlm-> ijkm", S1, I[i], optimize=path)
+            self._SI[i] = np.einsum("ikl, jlm-> ijkm", S1, I_[i], optimize=path)
 
-        for i in range(acc_len, I.shape[0]):
-            self._SI[i] = np.einsum("ikl, jlm-> ijkm", S2, I[i], optimize=path)
+        for i in range(acc_len, I_.shape[0]):
+            self._SI[i] = np.einsum("ikl, jlm-> ijkm", S2, I_[i], optimize=path)
 
     def set_HFI(self, theta: np.array, phi: np.array):
         r"""
@@ -347,7 +346,7 @@ class Hamiltonian:
 
     @classmethod
     @cache
-    def _get_spin_matrices(self, S: float = 0.5) -> [np.array, np.array, np.array]:
+    def _get_spin_matrices(self, S: float = 0.5) -> list[np.array, np.array, np.array]:
         r"""
         Get the spin matrices for a given spin.
 

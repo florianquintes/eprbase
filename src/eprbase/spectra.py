@@ -10,6 +10,7 @@
 
 import numpy as np
 import numexpr as ne
+from scipy.special import erf
 
 
 class Spectra:
@@ -141,7 +142,7 @@ class Spectra:
         self._sorted_fields = self._sorted_fields.T
         self._sorted_widths = self._sorted_widths.T
 
-    def _get_points_for_projection(self) -> [np.array, np.array, np.array]:
+    def _get_points_for_projection(self) -> list[np.array, np.array, np.array]:
         """
         Get the intensities, resonance fields and linewidths for each triangle.
 
@@ -196,7 +197,7 @@ class Spectra:
         print(heigth.min(), heigth.max())
         print(widths.shape)
         print(triangles.shape)
-        sigma = widths.mean(axis=2)
+        # sigma = widths.mean(axis=2)
         n = 0
         for i in range(triangles.shape[0]):
             for j in range(triangles.shape[1]):
@@ -291,11 +292,10 @@ class Spectra:
 
         b = field[np.newaxis, :] - center[:, np.newaxis]
 
-        gaussians_1 = intensity[:, np.newaxis] * ne.evaluate("exp(-(b**2) / sigma)")
+        gaussians_1 = intensity[:, np.newaxis] * ne.evaluate(
+            "exp(-(field**2) / sigma)", local_dict={"field": b, "sigma": sigma}
+        )
         return gaussians_1
-
-
-from scipy.special import erf
 
 
 def conv_function(x, gamma):

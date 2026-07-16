@@ -8,4 +8,4 @@
 @author: Florian Quintes
 """
 
-from ._dependencies import cp
+from ._dependencies import cp as cp

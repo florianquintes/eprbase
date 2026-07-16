@@ -46,7 +46,7 @@ class ResonanceFields:
 
         self._testing = testing
 
-    def get_res_fields(self) -> [np.array, np.array, np.array, np.array]:
+    def get_res_fields(self) -> list[np.array, np.array, np.array, np.array]:
         """
         Get the resonance fields.
 
@@ -329,7 +329,7 @@ class ResonanceFields:
 
     def _adaptive_spline(
         self, theta: float, phi: float
-    ) -> [CubicHermiteSpline, object, object, object]:
+    ) -> list[CubicHermiteSpline, object, object, object]:
         """
         Get a cubic spline representation for each energy level.
 
@@ -451,7 +451,7 @@ class ResonanceFields:
 
     def _get_energies_gradients(
         self, field: np.array, theta: float, phi: float
-    ) -> [np.array, tuple[np.array, np.array]]:
+    ) -> list[np.array, tuple[np.array, np.array]]:
         """
         Get the energies and gradients for the given field points.
 
@@ -667,7 +667,7 @@ class ResonanceFields:
         centers: np.array,
         new_centers: np.array,
         converged: np.array,
-    ) -> [np.array, np.array]:
+    ) -> list[np.array, np.array]:
         """
         Get all needed knots for the next iteration step.
 
@@ -868,7 +868,7 @@ class ResonanceFields:
         intensities: np.array,
         delta_E: CubicHermiteSpline,
         transitions: np.array,
-    ) -> [np.array, np.array, np.array]:
+    ) -> list[np.array, np.array, np.array]:
         """
         Filter transitions by their intensity.
 
@@ -905,7 +905,7 @@ class ResonanceFields:
         intensities: np.array,
         delta_E: CubicHermiteSpline,
         transitions: np.array,
-    ) -> [np.array, np.array, np.array]:
+    ) -> list[np.array, np.array, np.array]:
         # TODO: max_spread einführen!
         """
         Filter transitions by their field position.

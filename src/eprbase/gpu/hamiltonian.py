@@ -154,18 +154,20 @@ class Hamiltonian:
         spin_matrices = self._get_coupled_spin_matrices(0.5, 0.5, *spin.tolist())
         S1 = spin_matrices[0]
         S2 = spin_matrices[1]
-        I = spin_matrices[2:]
+        I_ = spin_matrices[2:]
 
-        self._SI = cp.zeros((I.shape[0], 3, 3, *S1[0].shape), dtype=CUPY_CMPLX)
-        path, _ = np.einsum_path("ikl, jlm-> ijkm", S1.get(), I[0].get(), optimize=True)
+        self._SI = cp.zeros((I_.shape[0], 3, 3, *S1[0].shape), dtype=CUPY_CMPLX)
+        path, _ = np.einsum_path(
+            "ikl, jlm-> ijkm", S1.get(), I_[0].get(), optimize=True
+        )
         for i in range(acc_len):
             self._SI[i] = cp.einsum(
-                "ikl, jlm-> ijkm", S1, I[i], optimize=path, dtype=CUPY_CMPLX
+                "ikl, jlm-> ijkm", S1, I_[i], optimize=path, dtype=CUPY_CMPLX
             )
 
-        for i in range(acc_len, I.shape[0]):
+        for i in range(acc_len, I_.shape[0]):
             self._SI[i] = cp.einsum(
-                "ikl, jlm-> ijkm", S2, I[i], optimize=path, dtype=CUPY_CMPLX
+                "ikl, jlm-> ijkm", S2, I_[i], optimize=path, dtype=CUPY_CMPLX
             )
 
     def set_HFI(self, theta: cp.array, phi: cp.array):
@@ -366,7 +368,7 @@ class Hamiltonian:
 
     @classmethod
     @cp.memoize()
-    def _get_spin_matrices(self, S: float = 0.5) -> [cp.array, cp.array, cp.array]:
+    def _get_spin_matrices(self, S: float = 0.5) -> list[cp.array, cp.array, cp.array]:
         r"""
         Get the spin matrices for a given spin.
 
