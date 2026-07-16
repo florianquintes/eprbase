@@ -14,6 +14,10 @@ import matplotlib.pyplot as plt
 
 
 class Grid:
+    """
+    A class to represent a grid for EPR simulations.
+    """
+
     def __init__(self, grid: str = "SOPHE", point_group="Ci", knots: int = 15):
         self._symmetry = point_group
         self._points = int(knots)
