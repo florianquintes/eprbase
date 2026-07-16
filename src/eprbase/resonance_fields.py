@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 from scipy.interpolate import interp1d, CubicHermiteSpline
 from copy import deepcopy
 import numpy as np
@@ -167,13 +168,9 @@ class ResonanceFields:
         plt.yscale("symlog")
         for i in range(levels.shape[1]):
             if width[i] > 0:
-                plt.plot(
-                    self._field * 1e3 / mu_b, levels[:, i], linewidth=width[i]
-                )
+                plt.plot(self._field * 1e3 / mu_b, levels[:, i], linewidth=width[i])
             else:
-                plt.plot(
-                    self._field * 1e3 / mu_b, levels[:, i], linestyle="--"
-                )
+                plt.plot(self._field * 1e3 / mu_b, levels[:, i], linestyle="--")
 
         if bisections:
             plt.vlines(
@@ -209,8 +206,7 @@ class ResonanceFields:
 
             trans = transitions[abs(delta_pop) > self._pop_trshld]
             trans = trans[
-                trans_prob[0, trans[:, 0], trans[:, 1]]
-                > self._trans_prob_trshld
+                trans_prob[0, trans[:, 0], trans[:, 1]] > self._trans_prob_trshld
             ]
 
             if i == 0:
@@ -260,9 +256,7 @@ class ResonanceFields:
             delta_energy, transition
         )
 
-        intensities = self._get_intensities(
-            res_fields, trans_prob, pop, transition
-        )
+        intensities = self._get_intensities(res_fields, trans_prob, pop, transition)
 
         # (
         #     res_fields,
@@ -278,9 +272,7 @@ class ResonanceFields:
             intensities,
             delta_energy,
             transition,
-        ) = self._filter_by_position(
-            res_fields, intensities, delta_energy, transition
-        )
+        ) = self._filter_by_position(res_fields, intensities, delta_energy, transition)
 
         widths = self._get_linewidths(res_fields, delta_energy)
 
@@ -310,8 +302,7 @@ class ResonanceFields:
         fields_1 = delta_splines.solve(self._nu)
         fields_2 = delta_splines.solve(-self._nu)
         res_fields = [
-            np.sort(np.append(fields_1[i], fields_2[i]))
-            for i in range(len(fields_1))
+            np.sort(np.append(fields_1[i], fields_2[i])) for i in range(len(fields_1))
         ]
 
         if not res_fields:
@@ -393,15 +384,11 @@ class ResonanceFields:
                 converged = np.ones(converged.size, dtype=np.bool_)
 
             # Add converged segments center to 'centers' list
-            centers = self._get_converged_centers(
-                centers, eval_centers, converged
-            )
+            centers = self._get_converged_centers(centers, eval_centers, converged)
 
             # Add non converged segments center to 'knots' list, append
             # converged knots to centers
-            knots, centers = self._get_knots(
-                knots, centers, eval_centers, converged
-            )
+            knots, centers = self._get_knots(knots, centers, eval_centers, converged)
 
             n += 1
 
@@ -503,9 +490,7 @@ class ResonanceFields:
 
         return knots, (eigvec_field, eigvec)
 
-    def _get_error_estimation(
-        self, segment: np.array, center: np.array
-    ) -> bool:
+    def _get_error_estimation(self, segment: np.array, center: np.array) -> bool:
         r"""
         Get the error estimation for the splines in the current segment.
 
@@ -532,9 +517,7 @@ class ResonanceFields:
         sum_E = segment[:, :, 0, 1] + segment[:, :, 1, 1]
         delta_grad = segment[:, :, 0, 2] - segment[:, :, 1, 2]
         E_est = 0.5 * sum_E + delta_B / 8 * delta_grad
-        B_error = np.max(
-            np.abs((center[:, :, 1] - E_est) / center[:, :, 2]), axis=1
-        )
+        B_error = np.max(np.abs((center[:, :, 1] - E_est) / center[:, :, 2]), axis=1)
         return B_error <= self._tau_B
 
     def _get_splines(self, knots: np.array) -> object:
@@ -586,9 +569,7 @@ class ResonanceFields:
         )
         return interp1d(field, eigvecs, axis=0, fill_value="extrapolate")
 
-    def _get_trans_prob_interp(
-        self, field: np.array, trans_prob: np.array
-    ) -> object:
+    def _get_trans_prob_interp(self, field: np.array, trans_prob: np.array) -> object:
         """
         Interpolate the transition probability along the field axis.
 
@@ -629,9 +610,7 @@ class ResonanceFields:
 
         pop = np.empty(eigvecs.shape)
         for i in range(eigvecs.shape[0]):
-            pop[i] = np.linalg.multi_dot(
-                [eigvecs_T[i], self._rho, eigvecs_inv[i]]
-            )
+            pop[i] = np.linalg.multi_dot([eigvecs_T[i], self._rho, eigvecs_inv[i]])
 
         pop = np.einsum("ajj -> aj", pop).real
 
@@ -878,8 +857,7 @@ class ResonanceFields:
         # Filter by transition probability
         trans_probs = trans_prob(B_center[0])
         transitions = transitions[
-            trans_probs[transitions[:, 0], transitions[:, 1]]
-            > self._trans_prob_trshld
+            trans_probs[transitions[:, 0], transitions[:, 1]] > self._trans_prob_trshld
         ]
 
         return transitions
@@ -990,16 +968,12 @@ class ResonanceFields:
         b = int(n * (n - 1) / 2)
         delta_coeff = np.empty((4, a, b))
 
-        delta_coeff = (
-            coeff[:, :, transitions[:, 0]] - coeff[:, :, transitions[:, 1]]
-        )
+        delta_coeff = coeff[:, :, transitions[:, 0]] - coeff[:, :, transitions[:, 1]]
         delta_splines.c = delta_coeff
 
         return delta_splines
 
-    def _get_linewidths(
-        self, field: np.array, delta_E: CubicHermiteSpline
-    ) -> np.array:
+    def _get_linewidths(self, field: np.array, delta_E: CubicHermiteSpline) -> np.array:
         """
         Calculate the gaussian linewidth for each resonance field.
 

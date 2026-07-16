@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 import numpy as np
 import scipy as sp
 from functools import cache
@@ -70,9 +71,7 @@ class Hamiltonian:
         grads = np.empty((field.size, EZ.shape[1]))
         for i in range(field.size):
             grads[i] = np.diag(
-                np.linalg.multi_dot(
-                    [np.conjugate(eigvec[i].T), EZ[i], eigvec[i]]
-                )
+                np.linalg.multi_dot([np.conjugate(eigvec[i].T), EZ[i], eigvec[i]])
             )
         return grads
 
@@ -150,9 +149,7 @@ class Hamiltonian:
         S2 = spin_matrices[1]
         I = spin_matrices[2:]
 
-        self._SI = np.zeros(
-            (I.shape[0], 3, 3, *S1[0].shape), dtype=np.complex128
-        )
+        self._SI = np.zeros((I.shape[0], 3, 3, *S1[0].shape), dtype=np.complex128)
         path, _ = np.einsum_path("ikl, jlm-> ijkm", S1, I[0], optimize=True)
         for i in range(acc_len):
             self._SI[i] = np.einsum("ikl, jlm-> ijkm", S1, I[i], optimize=path)
@@ -220,9 +217,7 @@ class Hamiltonian:
 
         """
         self._changed_ex = True
-        self._exchange = J_ex * (
-            np.eye(self._S1S2.shape[0]) * 0.5 + 2 * self._S1S2
-        )
+        self._exchange = J_ex * (np.eye(self._S1S2.shape[0]) * 0.5 + 2 * self._S1S2)
 
     def set_dipolar(self, D: float, E: float) -> None:
         r"""
@@ -245,9 +240,9 @@ class Hamiltonian:
 
         """
         self._changed_dip = True
-        self._dipolar = np.array(
-            [-D + E, -D - E, 2 * D], dtype=np.complex128
-        ) * np.eye(3, dtype=np.complex128)
+        self._dipolar = np.array([-D + E, -D - E, 2 * D], dtype=np.complex128) * np.eye(
+            3, dtype=np.complex128
+        )
 
     def set_DIP(self, theta, phi) -> None:
         if self._dipolar is None:
@@ -255,10 +250,7 @@ class Hamiltonian:
 
         D_rot = rotate_tensor(self._dipolar, phi, theta)
         self._DIP = (
-            (
-                D_rot[:, :, :, np.newaxis, np.newaxis]
-                * self._SS[np.newaxis, :, :, :, :]
-            )
+            (D_rot[:, :, :, np.newaxis, np.newaxis] * self._SS[np.newaxis, :, :, :, :])
             .sum(axis=1)
             .sum(axis=1)
         )
@@ -330,9 +322,7 @@ class Hamiltonian:
     def get_eigenvalues(self, field, theta, phi):
         self.get(field, theta, phi)
         if self._eigenvalues is None:
-            self._eigenvalues = np.linalg.eigvalsh(
-                np.round(self._matrix, decimals=1)
-            )
+            self._eigenvalues = np.linalg.eigvalsh(np.round(self._matrix, decimals=1))
         return self._eigenvalues
 
     def get_eigenvectors(self, field, theta, phi):
@@ -357,9 +347,7 @@ class Hamiltonian:
 
     @classmethod
     @cache
-    def _get_spin_matrices(
-        self, S: float = 0.5
-    ) -> [np.array, np.array, np.array]:
+    def _get_spin_matrices(self, S: float = 0.5) -> [np.array, np.array, np.array]:
         r"""
         Get the spin matrices for a given spin.
 

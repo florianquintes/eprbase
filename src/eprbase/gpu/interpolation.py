@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 import cupy as cp
 from cupyx.scipy.interpolate import RBFInterpolator, PchipInterpolator
 
@@ -17,7 +18,6 @@ CUPY_FLOAT = cp.float32
 
 
 class Interpolator:
-
     def __init__(self, theta: cp.array, phi: cp.array, data: tuple):
         self._theta_or = theta
         self._phi_or = phi
@@ -62,9 +62,7 @@ class Interpolator:
             return self._widths_interp(xyz).astype(CUPY_FLOAT)
 
     def get_transitions(self, grid_points: int) -> cp.array:
-        return cp.repeat(
-            self._transitions[cp.newaxis, :, :], grid_points, axis=0
-        )
+        return cp.repeat(self._transitions[cp.newaxis, :, :], grid_points, axis=0)
 
     # TODO: neighbors wieder verwenden, sobald neue Version veröffentlicht ist
     def _init_intensity_interpolator(self):

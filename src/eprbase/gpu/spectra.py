@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 import cupy as cp
 from tqdm import trange
 from eprbase.gpu._mem_handler import get_chunks, get_chunksize
@@ -69,9 +70,7 @@ class Spectra:
 
         """
         repeats = [len(arr) for arr in self._res_fields]
-        weights = cp.repeat(self._weights, repeats).astype(CUPY_FLOAT)[
-            :, cp.newaxis
-        ]
+        weights = cp.repeat(self._weights, repeats).astype(CUPY_FLOAT)[:, cp.newaxis]
         weights = cp.squeeze(weights)
         intensity = cp.concatenate(self._intensities)
         wintensity = intensity * weights
@@ -99,9 +98,7 @@ class Spectra:
         self._sort_by_transition()
         res_fields, intens, widths = self._get_points_for_projection()
         areas = self._triangles[:, 3]
-        spectras = self._get_triangle_spec(
-            field, res_fields, intens, areas, widths
-        )
+        spectras = self._get_triangle_spec(field, res_fields, intens, areas, widths)
         spectra = cp.einsum("abc -> c", spectras)
         # sig = widths.mean() ** 2 / np.log(2)
         # gaussian = np.exp(-((field - field.mean()) ** 2 / sig))
@@ -148,14 +145,10 @@ class Spectra:
             .reshape(shp)
         )
         self._sorted_fields = (
-            cp.array(self._res_fields, dtype=CUPY_FLOAT)
-            .flatten()[sorting]
-            .reshape(shp)
+            cp.array(self._res_fields, dtype=CUPY_FLOAT).flatten()[sorting].reshape(shp)
         )
         self._sorted_widths = (
-            cp.array(self._widths, dtype=CUPY_FLOAT)
-            .flatten()[sorting]
-            .reshape(shp)
+            cp.array(self._widths, dtype=CUPY_FLOAT).flatten()[sorting].reshape(shp)
         )
 
     def _get_points_for_projection(self) -> [cp.array, cp.array, cp.array]:
@@ -209,9 +202,7 @@ class Spectra:
         x = cp.sort(res_fields)
         y = cp.zeros((*heigth.shape, 3), dtype=CUPY_FLOAT)
         y[:, :, 1] = heigth
-        triangles = cp.empty(
-            (*res_fields.shape[:2], *field.shape), dtype=CUPY_FLOAT
-        )
+        triangles = cp.empty((*res_fields.shape[:2], *field.shape), dtype=CUPY_FLOAT)
         print(heigth.min(), heigth.max())
         print(widths.shape)
         print(triangles.shape)
@@ -224,9 +215,9 @@ class Spectra:
                     triangles[i, j] = cp.zeros(field.size, dtype=CUPY_FLOAT)
                     triangles[i, j][pos] = heigth[i, j]
                 else:
-                    triangles[i, j] = cp.interp(
-                        field, x[i, j], y[i, j]
-                    ).astype(CUPY_FLOAT)
+                    triangles[i, j] = cp.interp(field, x[i, j], y[i, j]).astype(
+                        CUPY_FLOAT
+                    )
 
                 # sig = sigma[i, j] ** 2 / np.log(2)
                 # gaussian = (
@@ -313,9 +304,7 @@ class Spectra:
             b = field[cp.newaxis, lb:rb] - center[:, cp.newaxis]
             exp = -(b**2) / sigma
             del b
-            gaussians[lb:rb] = (wintensity[:, cp.newaxis] * cp.exp(exp)).sum(
-                axis=0
-            )
+            gaussians[lb:rb] = (wintensity[:, cp.newaxis] * cp.exp(exp)).sum(axis=0)
             del exp
 
         return gaussians

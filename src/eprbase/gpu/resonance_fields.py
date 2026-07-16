@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 from scipy.interpolate import interp1d, PPoly  # Ersetzen
 from copy import deepcopy
 import numpy as np
@@ -101,10 +102,8 @@ class ResonanceFields:
             transition_t.append(transition)
         print("res_fields: ", time() - start)
 
-        (res_fields_t, intensities_t, widths_t, transition_t) = (
-            self._sanitize_results(
-                res_fields_t, intensities_t, widths_t, transition_t
-            )
+        (res_fields_t, intensities_t, widths_t, transition_t) = self._sanitize_results(
+            res_fields_t, intensities_t, widths_t, transition_t
         )
 
         return res_fields_t, intensities_t, widths_t, transition_t
@@ -191,13 +190,9 @@ class ResonanceFields:
         plt.yscale("symlog")
         for i in range(levels.shape[1]):
             if width[i] > 0:
-                plt.plot(
-                    self._field * 1e3 / mu_b, levels[:, i], linewidth=width[i]
-                )
+                plt.plot(self._field * 1e3 / mu_b, levels[:, i], linewidth=width[i])
             else:
-                plt.plot(
-                    self._field * 1e3 / mu_b, levels[:, i], linestyle="--"
-                )
+                plt.plot(self._field * 1e3 / mu_b, levels[:, i], linestyle="--")
 
         if bisections:
             plt.vlines(
@@ -240,8 +235,7 @@ class ResonanceFields:
 
             trans = transitions[abs(delta_pop) > self._pop_trshld]
             trans = trans[
-                trans_prob[0, trans[:, 0], trans[:, 1]]
-                > self._trans_prob_trshld
+                trans_prob[0, trans[:, 0], trans[:, 1]] > self._trans_prob_trshld
             ]
 
             if i == 0:
@@ -250,9 +244,7 @@ class ResonanceFields:
                 trans_list = cp.vstack([trans_list, trans])
 
         # TODO: Ändern, sollte cp.unique schneller werden.
-        transitions = cp.array(
-            np.unique(trans_list.get(), axis=0), dtype=cp.uint32
-        )
+        transitions = cp.array(np.unique(trans_list.get(), axis=0), dtype=cp.uint32)
 
         energies = knots[0, :, 1]
         start = transitions[:, 0]
@@ -322,9 +314,7 @@ class ResonanceFields:
             intensities,
             delta_energy,
             transition,
-        ) = self._filter_by_position(
-            res_fields, intensities, delta_energy, transition
-        )
+        ) = self._filter_by_position(res_fields, intensities, delta_energy, transition)
 
         widths = self._get_linewidths(res_fields, delta_energy)
         print((end_ - start_) / (time() - start), time() - start)
@@ -392,9 +382,7 @@ class ResonanceFields:
             for _ in range(res_fields[i].size):
                 coeff.append(delta_splines.c[:, :, i])
 
-        transition = cp.array(
-            [t for sec in trans for t in sec], dtype=cp.uint32
-        )
+        transition = cp.array([t for sec in trans for t in sec], dtype=cp.uint32)
         transitions = transition.reshape((transition.size // 2, 2))
         res_fields = cp.array([f for sec in fields for f in sec])
         coeff = cp.array(coeff)  # , dtype=CUPY_FLOAT)
@@ -431,9 +419,7 @@ class ResonanceFields:
 
         return splines
 
-    def _get_trans_prob_interp(
-        self, field: cp.array, trans_prob: cp.array
-    ) -> object:
+    def _get_trans_prob_interp(self, field: cp.array, trans_prob: cp.array) -> object:
         """
         Interpolate the transition probability along the field axis.
 
@@ -451,9 +437,7 @@ class ResonanceFields:
 
         """
         # TODO: interp1d ersetzen zu CuPy
-        return interp1d(
-            field.get(), trans_prob.get(), axis=0, fill_value="extrapolate"
-        )
+        return interp1d(field.get(), trans_prob.get(), axis=0, fill_value="extrapolate")
 
     def _get_pop_interp(self, field: cp.array, eigvecs: cp.array) -> object:
         """
@@ -477,16 +461,12 @@ class ResonanceFields:
 
         pop = cp.empty(eigvecs.shape, dtype=CUPY_FLOAT)
         for i in range(eigvecs.shape[0]):
-            pop[i] = cp.dot(
-                eigvecs_T[i], cp.dot(self._rho, eigvecs_inv[i])
-            ).real
+            pop[i] = cp.dot(eigvecs_T[i], cp.dot(self._rho, eigvecs_inv[i])).real
 
         pop = cp.einsum("ajj -> aj", pop).real
 
         # TODO: interp1d ersetzen zu CuPy
-        return interp1d(
-            field.get(), pop.get(), axis=0, fill_value="extrapolate"
-        )
+        return interp1d(field.get(), pop.get(), axis=0, fill_value="extrapolate")
 
     def _get_transition_probabilities(self, eigvecs: cp.array) -> cp.array:
         """
@@ -709,9 +689,7 @@ class ResonanceFields:
             for i in range(transition_count.shape[0]):
                 idx_remove = cp.concatenate(
                     [
-                        cp.linspace(
-                            start, end - 1, int(end - start), dtype=cp.uint32
-                        )
+                        cp.linspace(start, end - 1, int(end - start), dtype=cp.uint32)
                         for start, end in zip(start_idx[i], end_idx[i])
                     ]
                 ).tolist()
@@ -757,8 +735,7 @@ class ResonanceFields:
         # TODO: trans_prob(B_center[0]) , wenn interp1d in CuPy
         trans_probs = cp.array(trans_prob(B_center[0].get()), dtype=CUPY_FLOAT)
         transitions = transitions[
-            trans_probs[transitions[:, 0], transitions[:, 1]]
-            > self._trans_prob_trshld
+            trans_probs[transitions[:, 0], transitions[:, 1]] > self._trans_prob_trshld
         ]
 
         return transitions
@@ -868,17 +845,13 @@ class ResonanceFields:
         b = transitions.shape[0]
         delta_coeff = cp.empty((4, a, b))
 
-        delta_coeff = (
-            coeff[:, :, transitions[:, 0]] - coeff[:, :, transitions[:, 1]]
-        )
+        delta_coeff = coeff[:, :, transitions[:, 0]] - coeff[:, :, transitions[:, 1]]
 
         delta_splines.c = delta_coeff
 
         return delta_splines
 
-    def _get_linewidths(
-        self, field: cp.array, delta_E: CubicHermiteSpline
-    ) -> cp.array:
+    def _get_linewidths(self, field: cp.array, delta_E: CubicHermiteSpline) -> cp.array:
         """
         Calculate the gaussian linewidth for each resonance field.
 
@@ -895,9 +868,7 @@ class ResonanceFields:
             Linewidth for each resonance field.
 
         """
-        linewidths = 1 / cp.diag(
-            delta_E.derivative()(field).astype(CUPY_FLOAT)
-        )
+        linewidths = 1 / cp.diag(delta_E.derivative()(field).astype(CUPY_FLOAT))
 
         return linewidths
 
@@ -916,13 +887,9 @@ class ResonanceFields:
             Array containing the start segment for each angle.
 
         """
-        return cp.linspace(
-            2 * n_angles, 3 * n_angles - 1, n_angles, dtype=cp.uint32
-        )
+        return cp.linspace(2 * n_angles, 3 * n_angles - 1, n_angles, dtype=cp.uint32)
 
-    def _get_start_points(
-        self, theta: cp.array, phi: cp.array
-    ) -> [cp.array, cp.array]:
+    def _get_start_points(self, theta: cp.array, phi: cp.array) -> [cp.array, cp.array]:
         """
         Get the eigenvalues and eigenvectors for the initial points.
 
@@ -988,9 +955,7 @@ class ResonanceFields:
         E_interp = 0.5 * sum_E + delta_B / 8 * delta_grad
         return E_interp
 
-    def _get_spline_error(
-        self, calculated: cp.array, expected: cp.array
-    ) -> cp.array:
+    def _get_spline_error(self, calculated: cp.array, expected: cp.array) -> cp.array:
         r"""
         Get the maximum field error for each segment.
 
@@ -1031,9 +996,7 @@ class ResonanceFields:
         """
         start_idx = cp.sum(self._n_tot_centers).get()
         n_idx = cp.sum(self._n_new_centers).get()
-        return cp.linspace(
-            start_idx, start_idx + n_idx - 1, n_idx, dtype=cp.uint32
-        )
+        return cp.linspace(start_idx, start_idx + n_idx - 1, n_idx, dtype=cp.uint32)
 
     def _get_start_neighbors(self, N: int) -> cp.array:
         """
@@ -1050,9 +1013,7 @@ class ResonanceFields:
             Index of the left and right neighbor for each angle.
 
         """
-        return cp.linspace(0, 2 * N - 1, 2 * N, dtype=cp.uint32).reshape(
-            (N, 2)
-        )
+        return cp.linspace(0, 2 * N - 1, 2 * N, dtype=cp.uint32).reshape((N, 2))
 
     def _set_idx_man_map(self) -> None:
         """
@@ -1065,9 +1026,7 @@ class ResonanceFields:
         None
 
         """
-        self._idx_man_map = cp.empty(
-            self._n_new_centers.sum().get(), dtype=cp.uint32
-        )
+        self._idx_man_map = cp.empty(self._n_new_centers.sum().get(), dtype=cp.uint32)
 
         pos = 0
         for j, n in enumerate(self._n_new_centers):
@@ -1158,9 +1117,7 @@ class ResonanceFields:
         else:
             self._n_new_centers[:] = 0
 
-    def _evaluate_segments(
-        self, values: cp.array, theta, phi
-    ) -> [cp.array, cp.array]:
+    def _evaluate_segments(self, values: cp.array, theta, phi) -> [cp.array, cp.array]:
         """
         Evaluate all segments.
 
@@ -1260,9 +1217,7 @@ class ResonanceFields:
             self._set_idx_man_map()
 
             # Evaluate segments
-            new_points, new_eigvec = self._evaluate_segments(
-                points, theta, phi
-            )
+            new_points, new_eigvec = self._evaluate_segments(points, theta, phi)
 
             # Safe new points
             points = cp.vstack([points, new_points])
@@ -1299,9 +1254,7 @@ class ResonanceFields:
 
         return all_splines, all_population, all_trans_prob
 
-    def _get_multi_single_res_fields(
-        self, energy_levels, pop, trans_prob
-    ) -> cp.array:
+    def _get_multi_single_res_fields(self, energy_levels, pop, trans_prob) -> cp.array:
         """
         Get the resonance fields for one grid point.
 
@@ -1322,18 +1275,14 @@ class ResonanceFields:
             delta_energy, transition
         )
 
-        intensities = self._get_intensities(
-            res_fields, trans_prob, pop, transition
-        )
+        intensities = self._get_intensities(res_fields, trans_prob, pop, transition)
 
         (
             res_fields,
             intensities,
             delta_energy,
             transition,
-        ) = self._filter_by_position(
-            res_fields, intensities, delta_energy, transition
-        )
+        ) = self._filter_by_position(res_fields, intensities, delta_energy, transition)
 
         widths = self._get_linewidths(res_fields, delta_energy)
 
@@ -1390,9 +1339,7 @@ class ResonanceFields:
         """Initalize the IndexManager for each orientation."""
         n_theta = self._grid.shape[0]
         idx_left = 2 * cp.linspace(0, n_theta - 1, n_theta, dtype=cp.uint32)
-        self._idx_managers = [
-            IndexManager(idx, idx + 1) for idx in idx_left.get()
-        ]
+        self._idx_managers = [IndexManager(idx, idx + 1) for idx in idx_left.get()]
 
 
 class IndexManager:
@@ -1403,9 +1350,7 @@ class IndexManager:
         :param right_boundary: Der rechte feste Grenz-Indize
         """
         if left_boundary >= right_boundary:
-            raise ValueError(
-                "Left boundary must be smaller than right boundary."
-            )
+            raise ValueError("Left boundary must be smaller than right boundary.")
 
         self.indices = {
             left_boundary: {"left": None, "right": int(right_boundary)},
@@ -1428,9 +1373,7 @@ class IndexManager:
             int(left_neighbor) not in self.indices
             or int(right_neighbor) not in self.indices
         ):
-            raise ValueError(
-                "Both neighbors must already exist in the structure."
-            )
+            raise ValueError("Both neighbors must already exist in the structure.")
 
         if (
             self.indices[int(left_neighbor)]["right"] != right_neighbor

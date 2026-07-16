@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 import numpy as np
 import cupy as cp
 
@@ -39,9 +40,7 @@ class Hamiltonian:
 
     def _set_proj(self):
         """Set up the projection operator (S_x/S_y)."""
-        self._proj = cp.kron(
-            self._S[0], cp.eye(self._multiplicity, dtype=CUPY_CMPLX)
-        )
+        self._proj = cp.kron(self._S[0], cp.eye(self._multiplicity, dtype=CUPY_CMPLX))
 
     def get_proj(self):
         """Get the projection operator."""
@@ -144,9 +143,7 @@ class Hamiltonian:
         if sum(spin) == 0:
             self._multiplicity = 1
         else:
-            self._multiplicity = int(
-                (2 * cp.array(spin, dtype=CUPY_FLOAT) + 1).prod()
-            )
+            self._multiplicity = int((2 * cp.array(spin, dtype=CUPY_FLOAT) + 1).prod())
         self._changed_hfi = True
         self._set_proj()
 
@@ -154,17 +151,13 @@ class Hamiltonian:
             self._SI = None
             return
 
-        spin_matrices = self._get_coupled_spin_matrices(
-            0.5, 0.5, *spin.tolist()
-        )
+        spin_matrices = self._get_coupled_spin_matrices(0.5, 0.5, *spin.tolist())
         S1 = spin_matrices[0]
         S2 = spin_matrices[1]
         I = spin_matrices[2:]
 
         self._SI = cp.zeros((I.shape[0], 3, 3, *S1[0].shape), dtype=CUPY_CMPLX)
-        path, _ = np.einsum_path(
-            "ikl, jlm-> ijkm", S1.get(), I[0].get(), optimize=True
-        )
+        path, _ = np.einsum_path("ikl, jlm-> ijkm", S1.get(), I[0].get(), optimize=True)
         for i in range(acc_len):
             self._SI[i] = cp.einsum(
                 "ikl, jlm-> ijkm", S1, I[i], optimize=path, dtype=CUPY_CMPLX
@@ -240,8 +233,7 @@ class Hamiltonian:
         """
         self._changed_ex = True
         self._exchange = J_ex * (
-            cp.eye(self._S1S2.shape[0], dtype=CUPY_CMPLX) * 0.5
-            + 2 * self._S1S2
+            cp.eye(self._S1S2.shape[0], dtype=CUPY_CMPLX) * 0.5 + 2 * self._S1S2
         )
 
     def set_dipolar(self, D: float, E: float) -> None:
@@ -265,9 +257,9 @@ class Hamiltonian:
 
         """
         self._changed_dip = True
-        self._dipolar = cp.array(
-            [-D + E, -D - E, 2 * D], dtype=CUPY_FLOAT
-        ) * cp.eye(3, dtype=CUPY_FLOAT)
+        self._dipolar = cp.array([-D + E, -D - E, 2 * D], dtype=CUPY_FLOAT) * cp.eye(
+            3, dtype=CUPY_FLOAT
+        )
 
     def set_DIP(self, theta, phi) -> None:
         if self._dipolar is None:
@@ -275,10 +267,7 @@ class Hamiltonian:
 
         D_rot = rotate_tensor(self._dipolar, phi, theta)
         self._DIP = (
-            (
-                D_rot[:, :, :, cp.newaxis, cp.newaxis]
-                * self._SS[cp.newaxis, :, :, :, :]
-            )
+            (D_rot[:, :, :, cp.newaxis, cp.newaxis] * self._SS[cp.newaxis, :, :, :, :])
             .sum(axis=1)
             .sum(axis=1)
         )
@@ -352,9 +341,7 @@ class Hamiltonian:
     def get_eigenvalues(self, field, theta, phi):
         self.get(field, theta, phi)
         if self._eigenvalues is None:
-            self._eigenvalues = cp.linalg.eigvalsh(
-                cp.round(self._matrix, decimals=1)
-            )
+            self._eigenvalues = cp.linalg.eigvalsh(cp.round(self._matrix, decimals=1))
         return self._eigenvalues
 
     def get_eigenvectors(self, field, theta, phi):
@@ -379,9 +366,7 @@ class Hamiltonian:
 
     @classmethod
     @cp.memoize()
-    def _get_spin_matrices(
-        self, S: float = 0.5
-    ) -> [cp.array, cp.array, cp.array]:
+    def _get_spin_matrices(self, S: float = 0.5) -> [cp.array, cp.array, cp.array]:
         r"""
         Get the spin matrices for a given spin.
 
@@ -449,9 +434,7 @@ class Hamiltonian:
         # Spin Matrices
         s_x = 0.5 * (s_p + s_m)
         s_y = -0.5j * (s_p - s_m)
-        s_z = cp.linspace(S, -S, M, dtype=CUPY_CMPLX) * cp.eye(
-            M, dtype=CUPY_CMPLX
-        )
+        s_z = cp.linspace(S, -S, M, dtype=CUPY_CMPLX) * cp.eye(M, dtype=CUPY_CMPLX)
 
         return s_x, s_y, s_z
 

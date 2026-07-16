@@ -7,12 +7,12 @@
 
 @author: Florian Quintes
 """
+
 import numpy as np
 from scipy.interpolate import RBFInterpolator, CubicSpline
 
 
 class Interpolator:
-
     def __init__(self, theta: np.array, phi: np.array, data: tuple):
         self._theta_or = theta
         self._phi_or = phi
@@ -57,9 +57,7 @@ class Interpolator:
             return self._widths_interp(xyz)
 
     def get_transitions(self, grid_points: int) -> np.array:
-        return np.repeat(
-            self._transitions[np.newaxis, :, :], grid_points, axis=0
-        )
+        return np.repeat(self._transitions[np.newaxis, :, :], grid_points, axis=0)
 
     def _init_intensity_interpolator(self):
         intensities = self._intensities  # TODO

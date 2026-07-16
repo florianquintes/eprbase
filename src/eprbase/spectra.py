@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 import numpy as np
 import numexpr as ne
 
@@ -65,9 +66,7 @@ class Spectra:
 
         """
         repeats = [len(arr) for arr in self._res_fields]
-        weights = np.repeat(self._weights, repeats).astype(np.float32)[
-            :, np.newaxis
-        ]
+        weights = np.repeat(self._weights, repeats).astype(np.float32)[:, np.newaxis]
         center = np.concatenate(self._res_fields).astype(np.float32)
         intensity = np.concatenate(self._intensities).astype(np.float32)
         sigma = np.concatenate(self._widths).astype(np.float32)
@@ -93,9 +92,7 @@ class Spectra:
         self._sort_by_transition()
         res_fields, intens, widths = self._get_points_for_projection()
         areas = self._triangles[:, 3]
-        spectras = self._get_triangle_spec(
-            field, res_fields, intens, areas, widths
-        )
+        spectras = self._get_triangle_spec(field, res_fields, intens, areas, widths)
         spectra = np.einsum("abc -> c", spectras)
         # sig = widths.mean() ** 2 / np.log(2)
         # gaussian = np.exp(-((field - field.mean()) ** 2 / sig))
@@ -136,9 +133,7 @@ class Spectra:
         self._sorted_widths = np.empty(shp)
 
         for i in range(shp[0]):
-            self._sorted_intensities[i] = np.array(self._intensities)[i][
-                sorting[i]
-            ]
+            self._sorted_intensities[i] = np.array(self._intensities)[i][sorting[i]]
             self._sorted_fields[i] = np.array(self._res_fields)[i][sorting[i]]
             self._sorted_widths[i] = np.array(self._widths)[i][sorting[i]]
 
@@ -296,9 +291,7 @@ class Spectra:
 
         b = field[np.newaxis, :] - center[:, np.newaxis]
 
-        gaussians_1 = intensity[:, np.newaxis] * ne.evaluate(
-            "exp(-(b**2) / sigma)"
-        )
+        gaussians_1 = intensity[:, np.newaxis] * ne.evaluate("exp(-(b**2) / sigma)")
         return gaussians_1
 
 
@@ -321,10 +314,6 @@ def elementary_spec(field, y, gamma):
     S_y = (
         gamma
         / (y[2] - y[0])
-        * (
-            (F_y1 - F_y2) / (y[1] - y[0])
-            + (F_y3 - F_y2_) / (y[2] - y[1])
-            - 2 / gamma
-        )
+        * ((F_y1 - F_y2) / (y[1] - y[0]) + (F_y3 - F_y2_) / (y[2] - y[1]) - 2 / gamma)
     )
     return S_y

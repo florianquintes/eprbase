@@ -7,6 +7,7 @@
 
 @author: Florian Quintes
 """
+
 from pynvml import (
     nvmlInit,
     nvmlDeviceGetHandleByIndex,
