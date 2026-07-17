@@ -3,6 +3,7 @@ name = "eprbase"
 version = "0.1.0"
 description = "Low-level framework for EPR simulations using CPU and GPU."
 readme = "README.md"
+license = { file = "LICENSE" }
 authors = [
     { name = "florianquintes", email = "florian.quintes@pc.uni-freiburg.de" }
 ]
