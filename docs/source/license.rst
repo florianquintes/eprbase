@@ -19,7 +19,7 @@ In summary, the GPLv3:
 * provides no warranty.
 
 The complete license text is available in the
-`LICENSE <https://github.com/florianquintes/eprbase/blob/main/LICENSE>`_ file.
+`LICENSE <https://github.com/florianquintes/eprbase/blob/master/LICENSE>`_ file.
 
 For more information, see the
 `official GPLv3 license text <https://www.gnu.org/licenses/gpl-3.0.html>`_.
