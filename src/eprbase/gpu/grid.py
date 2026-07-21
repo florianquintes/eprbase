@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Spherical grid generation utilities for EPR simulations on GPU.
 
+This module provides the :class:`Grid` class to generate SOPHE-like spherical
+grids under different point-group symmetries and to compute integration weights,
+Voronoi areas, and spherical triangle indices using CuPy for GPU acceleration.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
@@ -15,7 +19,37 @@ import matplotlib.pyplot as plt
 
 
 class Grid:
+    """
+    Spherical integration grid for EPR simulations on GPU.
+
+    The grid is generated in spherical coordinates and can be returned either in
+    spherical or Cartesian representation. Symmetry-dependent reductions are
+    supported through point groups, with corresponding weight factors for
+    integration on the sphere.
+
+    Parameters
+    ----------
+    grid : str, default="SOPHE"
+        Grid family to generate. Currently only ``"SOPHE"`` is supported.
+    point_group : str, default="Ci"
+        Point-group symmetry used to construct the reduced grid.
+    knots : int, default=15
+        Resolution parameter controlling the number of grid knots.
+    """
+
     def __init__(self, grid: str = "SOPHE", point_group="Ci", knots: int = 15):
+        """
+        Initialize a new spherical grid object.
+
+        Parameters
+        ----------
+        grid : str, default="SOPHE"
+            Grid family name.
+        point_group : str, default="Ci"
+            Point-group symmetry identifier.
+        knots : int, default=15
+            Grid resolution parameter.
+        """
         self._symmetry = point_group
         self._points = int(knots)
 
@@ -34,16 +68,15 @@ class Grid:
         Parameters
         ----------
         point_group : str, optional
-            Symmetry. The default is "Ci". 'C1' returns the full sphere.
+            Symmetry identifier. ``"C1"`` returns the full-sphere grid.
         cartesian : bool, optional
-            If True, the coordinates will be returned as cartesians. The
-            default is False.
+            If ``True``, coordinates are returned in Cartesian form ``(x, y, z)``.
+            Otherwise spherical coordinates ``(r, theta, phi)`` are returned.
 
         Returns
         -------
-        cp.array, (N, 3)
-            Grid coordinates.
-
+        cp.array
+            Grid coordinates with shape ``(N, 3)``.
         """
         if self._symmetry != point_group:
             self._symmetry = point_group
@@ -62,13 +95,14 @@ class Grid:
 
     def get_areas(self) -> cp.array:
         """
-        Get the corresponding areas.
+        Get integration areas for all current grid points.
 
         Returns
         -------
-        cp.array, (N,)
-            Area of each Voronoi cell.
-
+        cp.array
+            Area weights with shape ``(N,)``. For ``"O3"`` and ``"Dooh"``,
+            precomputed weights are returned directly; otherwise Voronoi-cell
+            areas multiplied by symmetry weight factors are returned.
         """
         if self._symmetry in ["O3", "Dooh"]:
             return self._weight_factors
@@ -77,6 +111,15 @@ class Grid:
         return areas
 
     def show(self, voronoi=False):
+        """
+        Visualize the current grid and optionally its Voronoi tessellation.
+
+        Parameters
+        ----------
+        voronoi : bool, default=False
+            If ``True`` and a Voronoi tessellation is available, Voronoi vertices
+            and geodesic edges are plotted in addition to grid points.
+        """
         if voronoi and self._sv is not None:
             self._sv.sort_vertices_of_regions()
             if not self._cartesian:
@@ -146,22 +189,19 @@ class Grid:
 
     def _get_SOPHE_grid(self) -> cp.array:
         r"""
-        Get a SOPHE grid for one octant.
+        Generate a SOPHE grid for the configured symmetry.
+
+        The base construction in one octant follows
 
         .. math::
 
             \theta_{k, l}&=\frac{k}{M}\cdot\frac{\pi}{2}\;\;\;\;0\leq k\leq M\\
             \phi_{k, l} & = \frac{l}{k}\cdot\frac{\pi}{2}\;\;\;\; 0\leq l\leq k
 
-        Parameters
-        ----------
-        M : float
-            Size. Return N = (M+1)*(M+2)/2 knots.
-
         Returns
         -------
-        points : cp.array, (N, 3)
-            Spherical coordinates of the grid. (Radius, Elevation, Azimuth).
+        cp.array
+            Spherical coordinates of the grid with shape ``(N, 3)``.
         """
         phi_max, octants, border = self._get_grid_params()
         M = self._points
@@ -290,7 +330,7 @@ class Grid:
 
     def _get_EasySpin_grid(self, M: int) -> cp.array:
         r"""
-        Get an EasySpin grid for one octant.
+        Generate an EasySpin-style one-octant grid.
 
         .. math::
 
@@ -312,16 +352,19 @@ class Grid:
             \begin{pmatrix}z_C\\x_C\\y_C\end{pmatrix}\right)
 
 
+        Returns points in spherical coordinates after averaging three mapped
+        Cartesian constructions.
+
         Parameters
         ----------
         M : int
-            Size. Return N = (M+1)*(M+2)/2 knots.
+            Resolution parameter. Returns ``N = (M+1)(M+2)/2`` knots.
 
         Returns
         -------
-        points : cp.array, (N, 3)
-            Spherical coordinates of the grid. (Radius, Elevation, Azimuth).
-
+        cp.array
+            Spherical coordinates with shape ``(N, 3)``
+            as ``(radius, elevation, azimuth)``.
         """
         k, column = cp.tril_indices(M + 1)
         theta_a = (k / M) * (np.pi / 2)
@@ -357,18 +400,12 @@ class Grid:
 
     def _get_Voronoi_area(self) -> cp.array:
         """
-        Get the area of the Voronoi cell for each coordinate on the sphere.
-
-        Parameters
-        ----------
-        coordinates : cp.array, (N, 3)
-            Coordinates of the sphere.
+        Compute Voronoi-cell areas for the current spherical grid.
 
         Returns
         -------
-        areas : cp.array, (N, )
-            Area for each coordinate.
-
+        cp.array
+            Voronoi-cell areas for primary grid points with shape ``(N,)``.
         """
         cartesian = self._cartesian
         coordinates = cp.vstack((self._grid, self._border_points))
@@ -389,6 +426,16 @@ class Grid:
         return areas[: self._grid[:, 0].size]
 
     def _get_grid_params(self) -> list[float, int, bool]:
+        """
+        Get symmetry-dependent grid construction parameters.
+
+        Returns
+        -------
+        list
+            A list ``[phi_max, octants, border]`` where ``phi_max`` is the azimuth
+            range in radians, ``octants`` controls symmetry expansion, and
+            ``border`` indicates whether border handling is enabled.
+        """
         point_group = [
             "C1",
             "Ci",
@@ -420,15 +467,14 @@ class Grid:
         # TODO: Ordentlich machen und optimieren!
         # TODO: Zwingend für Cupy optimieren! Zu viele arrays werden erstellt.
         """
-        Get the indices for all possible triangle of the current grid.
+        Get triangle indices for spherical Delaunay triangulation.
 
         Returns
         -------
-        triangles : cp.array, (N, 4)
-            Indices for theta and phi to obtain a triangle on the grid. Also
-            contains the area of the Delaunay triangle.
-            (idx1, idx2, idx3, area)
-
+        cp.array
+            Triangle table with shape ``(T, 4)``:
+            ``(idx1, idx2, idx3, area)``, where indices refer to grid points and
+            ``area`` is the spherical triangle area.
         """
         phi_max, octants, border = self._get_grid_params()
         M = self._points
@@ -644,6 +690,23 @@ class Grid:
         indices = cp.vstack([uptris, downtris])
 
         def spherical_area(a, b, c):
+            """
+            Calculate the area of a spherical triangle on the unit sphere.
+
+            Parameters
+            ----------
+            a : cp.array
+                First vertex as Cartesian unit vector.
+            b : cp.array
+                Second vertex as Cartesian unit vector.
+            c : cp.array
+                Third vertex as Cartesian unit vector.
+
+            Returns
+            -------
+            float
+                Spherical triangle area in steradians.
+            """
             t = abs(cp.inner(a, cp.cross(b, c)))
             t /= 1 + cp.inner(a, b) + cp.inner(b, c) + cp.inner(a, c)
             return 2 * cp.arctan(t)
@@ -696,28 +759,27 @@ def spherical_to_cartesian(
     theta: cp.array, phi: cp.array, r: cp.array = 1.0
 ) -> cp.array:
     r"""
-    Transform spherical coordinates to cartesian.
+    Transform spherical coordinates to Cartesian coordinates.
 
     .. math::
 
-        x &= r\cdot\sin(\theta)\cdot\cos(\phi) \\
-        y &= r\cdot\sin(\theta)\cdot\sin(\phi) \\
-        z &= r\cdot\cos(\theta)
+    x &= r\sin(\theta)\cos(\phi) \\
+    y &= r\sin(\theta)\sin(\phi) \\
+    z &= r\cos(\theta)
 
     Parameters
     ----------
-    theta : cp.array, float
-        N theta angles. Elevation.
-    phi : cp.array, float
-        N phi angles. Azimuth.
-    r : cp.array, float, optional
-        Radius of the sphere.
+    theta : cp.array
+        Elevation angles in radians.
+    phi : cp.array
+        Azimuth angles in radians.
+    r : cp.array or float, optional
+        Radius values. Default is ``1.0``.
 
     Returns
     -------
-    cp.array, (N, 3)
-        Transformed coordinates.
-
+    cp.array
+        Cartesian coordinates with shape ``(N, 3)``.
     """
     x = r * cp.sin(theta) * cp.cos(phi)
     y = r * cp.sin(theta) * cp.sin(phi)
@@ -727,33 +789,32 @@ def spherical_to_cartesian(
 
 def cartesian_to_spherical(x: cp.array, y: cp.array, z: cp.array) -> cp.array:
     r"""
-    Transform cartesian coordinates to spherical.
+    Transform Cartesian coordinates to spherical coordinates.
 
     .. math::
 
-        r &= \sqrt{x^2 +y^2 + z^2} \\
-        \theta &= \arccos(\frac{z}{r})\\
-        \phi &= \arctan2(y, x)
+    r &= \sqrt{x^2 + y^2 + z^2} \\
+    \theta &= \arccos\left(\frac{z}{r}\right) \\
+    \phi &= \arctan2(y, x)
 
     Parameters
     ----------
     x : cp.array
-        x values.
+        X components.
     y : cp.array
-        y values.
+        Y components.
     z : cp.array
-        z values.
+        Z components.
 
     Returns
     -------
-    cp.array, (N, 3)
-        Transformed coordinates (r, \theta, \phi) -> (radius, elevation,
-        azimuth).
+    cp.array
+        Spherical coordinates with shape ``(N, 3)`` as
+        ``(radius, elevation, azimuth)``.
 
-    Note
-    ----
+    Notes
+    -----
     This convention uses a right-handed coordinate system.
-
     """
     r = cp.sqrt(x**2 + y**2 + z**2)
     theta = cp.arccos(z / r)
