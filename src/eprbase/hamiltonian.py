@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Hamiltonian construction for EPR simulations of radical pairs.
 
+This module provides the :class:`Hamiltonian` class to set up and diagonalize
+the spin Hamiltonian, including Electron-Zeeman (EZ), Hyperfine (HFI),
+Dipolar (DIP), and Exchange (EX) interactions.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
@@ -13,7 +17,31 @@ from functools import cache
 
 
 class Hamiltonian:
+    """
+    Spin Hamiltonian for coupled radical pairs.
+
+    Handles the construction and caching of the total spin Hamiltonian matrix,
+    including Zeeman, hyperfine, dipolar, and exchange terms. Provides methods
+    to retrieve the Hamiltonian matrix and its eigenvalues/eigenvectors for
+    given magnetic fields and orientations.
+
+    Attributes
+    ----------
+    _EZ, _HFI, _DIP, _SI, _matrix : ndarray or None
+        Internal caches for interaction tensors and the full Hamiltonian.
+    _eigenvalues, _eigenvectors : ndarray or None
+        Internal caches for eigenvalues and eigenvectors of the Hamiltonian.
+    _multiplicity : int
+        Total spin multiplicity of the system.
+    """
+
     def __init__(self) -> None:
+        """
+        Initialize the Hamiltonian object with default parameters.
+
+        Sets up coupled electron spins, initializes projection operators, and
+        flags all interaction terms as changed.
+        """
         self._EZ = None
         self._HFI = None
         self._DIP = None
@@ -35,34 +63,46 @@ class Hamiltonian:
         self._set_proj()
         self._symmetry = None
 
-    def _set_proj(self):
-        """Set up the projection operator (S_x/S_y)."""
+    def _set_proj(self) -> None:
+        """
+        Set up the projection operator (S_x/S_y).
+
+        Notes
+        -----
+        Updates the internal ``self._proj`` attribute in place.
+        """
         self._proj = np.kron(self._S[0], np.eye(self._multiplicity))
 
-    def get_proj(self):
-        """Get the projection operator."""
+    def get_proj(self) -> np.array:
+        """
+        Return the projection operator.
+
+        Returns
+        -------
+        np.array
+            The projection operator matrix.
+        """
         return self._proj
 
     def get_field_gradients(
         self, field: np.array, theta: np.array, phi: np.array
     ) -> np.array:
         """
-        Get the gradients for each energy level along the field axis.
+        Calculate the gradients of energy levels along the magnetic field axis.
 
         Parameters
         ----------
-        field : np.array, (N,)
-            Magnetic field point.
-        theta : np.array, (N,)
-            Theta angles.
-        phi : np.array, (N,)
-            Phi angles.
+        field : np.array, shape (N,)
+            Magnetic field values.
+        theta : np.array, shape (N,)
+            Theta angles in radians.
+        phi : np.array, shape (N,)
+            Phi angles in radians.
 
         Returns
         -------
-        grads : np.array, (N, M)
+        np.array, shape (N, M)
             Gradient along the field for each energy level.
-
         """
         eigvec = self.get_eigenvectors(field, theta, phi)
         self.set_EZ(theta, phi)
@@ -75,26 +115,33 @@ class Hamiltonian:
         return grads
 
     def set_g(self, g: np.array) -> None:
-        """Set the principal values of the g tensor for each electron."""
+        """
+        Set the principal values of the g tensor for each electron.
+
+        Parameters
+        ----------
+        g : np.array
+            Principal g-values. Must be provided for each electron in the
+            coupled system.
+        """
         self._g = np.array(np.atleast_2d(g))[:, :, np.newaxis] * np.eye(3)
         self._changed_g = True
 
-    def set_EZ(self, theta: np.array, phi: np.array):
+    def set_EZ(self, theta: np.array, phi: np.array) -> None:
         r"""
-        Set up a Hamiltonian for the Electron-Zeeman interaction.
+        Set up the Electron-Zeeman (EZ) interaction Hamiltonian.
 
         .. math::
 
-            \hat{\mathcal{H}}_{\mathrm{ez}} = -\sum_{i = x,y,z}{g_{iz} \cdot
-                                                                \hat{S}_i}
+           \hat{\mathcal{H}}_{\mathrm{ez}} = -\sum_{i = x,y,z}{g_{iz} \cdot
+           \hat{S}_i}
 
         Parameters
         ----------
         theta : np.array
-            Angle in radian.
+            Theta angles in radians.
         phi : np.array
-            Angle in radian.
-
+            Phi angles in radians.
         """
         self._EZ = np.zeros((theta.size, 4, 4), dtype=np.complex128)
         S = np.array([self._S1, self._S2])
@@ -106,30 +153,25 @@ class Hamiltonian:
 
     def set_Nuc(self, A: np.array, spin: np.array, acc_len: int = 0) -> None:
         r"""
-        Set the nuclei which couple with the radical pair.
+        Set the nuclei coupling with the radical pair and precalculate S*I.
 
-        Precalculate the product of S and I for the hyperfine coupling.
-
-        .. math::
-            SI_{mn} = S_m\cdot I_n
-
-        with:
+        Precalculates the product of electron spin (S) and nuclear spin (I)
+        matrices for the hyperfine coupling.
 
         .. math::
 
-            m, n \in\{x, y, z\}
-
-        Calculations will be done for all S_i - I_j hyperfine interactions.
+           SI_{mn} = S_m \cdot I_n
 
         Parameters
         ----------
-        spin : np.array, float
-            Nuclei spin numbers. First the ones for the acceptor electron, then
-            all for the donor electron.
+        A : np.array
+            Hyperfine coupling tensors.
+        spin : np.array of float
+            Nuclei spin numbers. First the ones for the acceptor electron,
+            then all for the donor electron.
         acc_len : int, optional
-            Number of nuclei which couple to the acceptor electron. The default
-            is 0.
-
+            Number of nuclei which couple to the acceptor electron. The
+            default is 0.
         """
         self._A = A
         if sum(spin) == 0:
@@ -158,7 +200,7 @@ class Hamiltonian:
 
     def set_HFI(self, theta: np.array, phi: np.array):
         r"""
-        Set up the hyperfine Hamiltonian for multiple nuclei with one electron.
+        Set up the Hyperfine (HFI) Hamiltonian for multiple nuclei.
 
         .. math::
 
@@ -173,13 +215,13 @@ class Hamiltonian:
 
             m, n \in\{x, y, z\}
 
+                
         Parameters
         ----------
         theta : np.array
-            Angle in radian.
+            Theta angles in radians.
         phi : np.array
-            Angle in radian.
-
+            Phi angles in radians.
         """
         if self._SI is None or self._multiplicity == 1:
             self._HFI = np.zeros((theta.size, 4, 4), dtype=np.complex128)
@@ -207,28 +249,27 @@ class Hamiltonian:
 
         .. math::
 
-            \hat{\mathcal{H}}_{\mathrm{ex}} = -2J\cdot \hat{S}_1\cdot \hat{S}_2
+        \hat{\mathcal{H}}_{\mathrm{ex}} = -2J\cdot \hat{S}_1\cdot \hat{S}_2
 
         Parameters
         ----------
         J_ex : float
-            Exchange coupling.
-
+            Exchange coupling constant.
         """
         self._changed_ex = True
         self._exchange = J_ex * (np.eye(self._S1S2.shape[0]) * 0.5 + 2 * self._S1S2)
 
     def set_dipolar(self, D: float, E: float) -> None:
         r"""
-        Set up the D/ZFS tensor.
+        Set up the Dipolar / Zero-Field Splitting (ZFS) tensor.
 
         .. math::
 
-            \mathbf{D} =\begin{bmatrix}
-                            -D+E & 0   & 0 \\
-                            0   & -D-E & 0 \\
-                            0   & 0   & 2\cdot D
-                        \end{bmatrix}
+        \mathbf{D} = \begin{bmatrix}
+        -D+E & 0   & 0 \\
+        0   & -D-E & 0 \\
+        0   & 0   & 2\cdot D
+        \end{bmatrix}
 
         Parameters
         ----------
@@ -236,7 +277,6 @@ class Hamiltonian:
             D value of the zero field splitting.
         E : float
             E value of the zero field splitting.
-
         """
         self._changed_dip = True
         self._dipolar = np.array([-D + E, -D - E, 2 * D], dtype=np.complex128) * np.eye(
@@ -244,6 +284,19 @@ class Hamiltonian:
         )
 
     def set_DIP(self, theta, phi) -> None:
+        """
+        Set up the Dipolar interaction Hamiltonian.
+
+        Rotates the dipolar tensor according to the given angles and calculates
+        the interaction term.
+
+        Parameters
+        ----------
+        theta : np.array
+            Theta angles in radians.
+        phi : np.array
+            Phi angles in radians.
+        """
         if self._dipolar is None:
             return np.zeros((theta.size, 4, 4), dtype=np.complex128)
 
@@ -257,17 +310,36 @@ class Hamiltonian:
     def get_symmetry() -> str:
         # TODO: Funktion erstellen und Tests schreiben.
         """
-        Get the SO(3) group of the hamiltonian.
+        Get the SO(3) point group symmetry of the Hamiltonian.
 
         Returns
         -------
-        symmetry: str
-            SO(3) group.
-
+        str
+            The SO(3) group identifier. Currently defaults to ``"Ci"``.
         """
         return "Ci"
 
-    def get(self, field, theta, phi):
+    def get(self, field, theta, phi) -> np.array:
+        """
+        Calculate and return the total Hamiltonian matrix.
+
+        Caches the result if neither the interaction parameters nor the
+        field/orientation have changed since the last call.
+
+        Parameters
+        ----------
+        field : np.array, shape (N,)
+            Magnetic field values.
+        theta : np.array, shape (N,)
+            Theta angles in radians.
+        phi : np.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        np.array, shape (N, M, M)
+            The total Hamiltonian matrix for each orientation/field point.
+        """
         same_theta = np.array_equal(theta, self._theta)
         same_phi = np.array_equal(phi, self._phi)
         same_angles = same_theta and same_phi
@@ -310,7 +382,26 @@ class Hamiltonian:
 
         return self._matrix
 
-    def get_eigen(self, field, theta, phi):
+    def get_eigen(self, field, theta, phi) -> tuple[np.array, np.array]:
+        """
+        Return the eigenvalues and eigenvectors of the Hamiltonian.
+
+        Parameters
+        ----------
+        field : np.array, shape (N,)
+            Magnetic field values.
+        theta : np.array, shape (N,)
+            Theta angles in radians.
+        phi : np.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        eigenvalues : np.array, shape (N, M)
+            Eigenvalues of the Hamiltonian.
+        eigenvectors : np.array, shape (N, M, M)
+            Corresponding eigenvectors.
+        """
         self.get(field, theta, phi)
         if self._eigenvectors is None:
             self._eigenvalues, self._eigenvectors = np.linalg.eigh(
@@ -318,13 +409,47 @@ class Hamiltonian:
             )
         return self._eigenvalues, self._eigenvectors
 
-    def get_eigenvalues(self, field, theta, phi):
+    def get_eigenvalues(self, field, theta, phi) -> np.array:
+        """
+        Return only the eigenvalues of the Hamiltonian.
+
+        Parameters
+        ----------
+        field : np.array, shape (N,)
+            Magnetic field values.
+        theta : np.array, shape (N,)
+            Theta angles in radians.
+        phi : np.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        np.array, shape (N, M)
+            Eigenvalues of the Hamiltonian.
+        """
         self.get(field, theta, phi)
         if self._eigenvalues is None:
             self._eigenvalues = np.linalg.eigvalsh(np.round(self._matrix, decimals=1))
         return self._eigenvalues
 
-    def get_eigenvectors(self, field, theta, phi):
+    def get_eigenvectors(self, field, theta, phi) -> np.array:
+        """
+        Return only the eigenvectors of the Hamiltonian.
+
+        Parameters
+        ----------
+        field : np.array, shape (N,)
+            Magnetic field values.
+        theta : np.array, shape (N,)
+            Theta angles in radians.
+        phi : np.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        np.array, shape (N, M, M)
+            Eigenvectors of the Hamiltonian.
+        """
         self.get(field, theta, phi)
         if self._eigenvectors is None:
             self._eigenvalues, self._eigenvectors = np.linalg.eigh(
@@ -335,6 +460,12 @@ class Hamiltonian:
     @classmethod
     @cache
     def _init_coupled_electron_spins(self) -> np.array:
+        """
+        Initialize spin matrices for the coupled electron system.
+
+        Calculates and caches the total spin vectors and their products
+        (e.g., :math:`S_1 \cdot S_2`) for the two coupled electrons.
+        """
         sigma_x, sigma_y, sigma_z = self._get_spin_matrices(0.5)
 
         pauli = np.array([sigma_x, sigma_y, sigma_z])
@@ -348,9 +479,9 @@ class Hamiltonian:
     @cache
     def _get_spin_matrices(self, S: float = 0.5) -> list[np.array, np.array, np.array]:
         r"""
-        Get the spin matrices for a given spin.
+        Calculate the spin matrices for a given spin quantum number.
 
-        Calculates the spin matrices for a given spin using:
+        Uses the standard ladder operator approach:
 
         .. math::
 
@@ -422,9 +553,9 @@ class Hamiltonian:
     @cache
     def _get_coupled_spin_matrices(self, *spins: float) -> np.array:
         r"""
-        Calculate all spin matrices for a coupled system.
+        Calculate spin matrices for a system of multiple coupled spins.
 
-        All spins are coupled into the same product basis.
+        All spins are coupled into the same product basis:
 
         .. math::
 
@@ -461,14 +592,13 @@ class Hamiltonian:
         Parameters
         ----------
         *spins : float
-            All spin quantum numbers for all coupled spins.
+            Spin quantum numbers for all coupled spins.
 
         Returns
         -------
-        spin_matrices : np.array
-            Spin vectors for each coupled spin. Same order as corresponding
-            spin.
-
+        np.array
+            Array of spin vectors for each coupled spin, in the same order
+            as the input spins.
         """
         spins = np.array(spins)
         dims = (2 * spins + 1).astype(int)
@@ -494,41 +624,38 @@ def rotate_tensor(
     tensor: np.array, phi: np.array, theta: np.array, psi: np.array = None
 ) -> np.array:
     r"""
-    Algorithm:
-    Euler transformation using y-convention. The euler matrix is set up
-    with the given angles. Phi and theta is necessary, psi is optional.
-    The euler matrix O of the SO(3) Group in y-convention is set up in already
-    multiplicated form. Then the orthogonal similarity transformation of the
-    tensor T is carried out:
+    Rotate a tensor using Euler transformation in y-convention.
+
+    Performs an orthogonal similarity transformation of the tensor:
 
     .. math::
 
-        T' = O^{-1}\cdot T \cdot O
+       T' = O^{-1} \cdot T \cdot O
 
     with:
 
-    .. math::
+        .. math::
 
-        O^{-1} = O^T
+            O^{-1} = O^T
 
+    where :math:`O` is the Euler matrix of the SO(3) group in
+    y-convention.
 
     Parameters
     ----------
     tensor : np.array
-        Tensor which should be rotated using Euler transformation
-        (y-convention).
-    phi : float
-        Phi angle in radian for transformation.
-    theta : float
-        Theta angle in radian for transformation.
-    psi : float, optional
-        Psi angle in radian for transformation. The default is None.
+        Tensor to be rotated. Can be 2D or 3D.
+    phi : float or np.array
+        Phi angle(s) in radians.
+    theta : float or np.array
+        Theta angle(s) in radians.
+    psi : float or np.array, optional
+        Psi angle(s) in radians. If None, defaults to zero.
 
     Returns
     -------
-    rotatedTensor : np.array
-        Rotated tensor.
-
+    np.array
+        The rotated tensor.
     """
     if psi is None:
         psi = np.zeros(phi.size)
