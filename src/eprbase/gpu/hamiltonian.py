@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Hamiltonian construction utilities for EPR simulations on GPU.
 
+This module provides the :class:`Hamiltonian` class to set up and diagonalize
+the spin Hamiltonian on GPU, including Electron-Zeeman (EZ), Hyperfine (HFI),
+Dipolar (DIP), and Exchange (EX) interactions using CuPy for GPU acceleration.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
@@ -16,7 +20,31 @@ CUPY_CMPLX = cp.complex64
 
 
 class Hamiltonian:
+    """
+    Spin Hamiltonian constructor for GPU-accelerated EPR simulations.
+
+    Handles the construction and caching of the total spin Hamiltonian matrix on GPU,
+    including Zeeman, hyperfine, dipolar, and exchange terms. Provides methods
+    to retrieve the Hamiltonian matrix and its eigenvalues/eigenvectors for
+    given magnetic fields and orientations using CuPy arrays.
+
+    Attributes
+    ----------
+    _EZ, _HFI, _DIP, _SI, _matrix : cp.array or None
+        Internal caches for interaction tensors and the full Hamiltonian.
+    _eigenvalues, _eigenvectors : cp.array or None
+        Internal caches for spectral data.
+    _multiplicity : int
+        Total spin multiplicity of the system.
+    """
+
     def __init__(self) -> None:
+        """
+        Initialize the Hamiltonian object on GPU.
+
+        Sets up coupled electron spins, initializes projection operators, and
+        flags all interaction terms as changed.
+        """
         self._EZ = None
         self._HFI = None
         self._DIP = None
@@ -38,34 +66,46 @@ class Hamiltonian:
         self._set_proj()
         self._symmetry = None
 
-    def _set_proj(self):
-        """Set up the projection operator (S_x/S_y)."""
+    def _set_proj(self) -> None:
+        """
+        Set up the projection operator (S_x/S_y) on GPU.
+
+        Notes
+        -----
+        Updates the internal ``self._proj`` attribute in place.
+        """
         self._proj = cp.kron(self._S[0], cp.eye(self._multiplicity, dtype=CUPY_CMPLX))
 
-    def get_proj(self):
-        """Get the projection operator."""
+    def get_proj(self) -> cp.array:
+        """
+        Return the projection operator on GPU.
+
+        Returns
+        -------
+        cp.array
+            The projection operator matrix.
+        """
         return self._proj
 
     def get_field_gradients(
         self, field: cp.array, theta: cp.array, phi: cp.array
     ) -> cp.array:
         """
-        Get the gradients for each energy level along the field axis.
+        Calculate gradients of energy levels along the magnetic field axis on GPU.
 
         Parameters
         ----------
-        field : cp.array, (N,)
-            Magnetic field point.
-        theta : cp.array, (N,)
-            Theta angles.
-        phi : cp.array, (N,)
-            Phi angles.
+        field : cp.array, shape (N,)
+            Magnetic field values.
+        theta : cp.array, shape (N,)
+            Theta angles in radians.
+        phi : cp.array, shape (N,)
+            Phi angles in radians.
 
         Returns
         -------
-        grads : cp.array, (N, M)
+        cp.array, shape (N, M)
             Gradient along the field for each energy level.
-
         """
         eigvec = self.get_eigenvectors(field, theta, phi)
         self.set_EZ(theta, phi)
@@ -78,7 +118,15 @@ class Hamiltonian:
         return grads
 
     def set_g(self, g: cp.array) -> None:
-        """Set the principal values of the g tensor for each electron."""
+        """
+        Set the principal values of the g tensor for each electron on GPU.
+
+        Parameters
+        ----------
+        g : cp.array
+            Principal g-values. Must be provided for each electron in the
+            coupled system.
+        """
         self._g = cp.array(cp.atleast_2d(g), dtype=CUPY_FLOAT)[
             :, :, cp.newaxis
         ] * cp.eye(3, dtype=CUPY_FLOAT)
@@ -86,20 +134,19 @@ class Hamiltonian:
 
     def set_EZ(self, theta: cp.array, phi: cp.array):
         r"""
-        Set up a Hamiltonian for the Electron-Zeeman interaction.
+        Set up the Electron-Zeeman (EZ) interaction Hamiltonian on GPU.
 
         .. math::
 
-            \hat{\mathcal{H}}_{\mathrm{ez}} = -\sum_{i = x,y,z}{g_{iz} \cdot
-                                                                \hat{S}_i}
+           \hat{\mathcal{H}}_{\mathrm{ez}} = -\sum_{i = x,y,z}{g_{iz} \cdot
+           \hat{S}_i}
 
         Parameters
         ----------
         theta : cp.array
-            Angle in radian.
+            Theta angles in radians.
         phi : cp.array
-            Angle in radian.
-
+            Phi angles in radians.
         """
         self._EZ = cp.zeros((theta.size, 4, 4), dtype=CUPY_CMPLX)
         S = cp.array([self._S1, self._S2], dtype=CUPY_CMPLX)
@@ -111,12 +158,14 @@ class Hamiltonian:
 
     def set_Nuc(self, A: cp.array, spin: cp.array, acc_len: int = 0) -> None:
         r"""
-        Set the nuclei which couple with the radical pair.
+        Set the nuclei coupling with the radical pair and precalculate S*I on GPU.
 
-        Precalculate the product of S and I for the hyperfine coupling.
+        Precalculates the product of electron spin (S) and nuclear spin (I)
+        matrices for the hyperfine coupling.
 
         .. math::
-            SI_{mn} = S_m\cdot I_n
+
+           SI_{mn} = S_m \cdot I_n
 
         with:
 
@@ -124,17 +173,16 @@ class Hamiltonian:
 
             m, n \in\{x, y, z\}
 
-        Calculations will be done for all S_i - I_j hyperfine interactions.
-
         Parameters
         ----------
-        spin : cp.array, float
-            Nuclei spin numbers. First the ones for the acceptor electron, then
-            all for the donor electron.
+        A : cp.array
+            Hyperfine coupling tensors.
+        spin : cp.array of float
+            Nuclei spin numbers. First the ones for the acceptor electron,
+            then all for the donor electron.
         acc_len : int, optional
-            Number of nuclei which couple to the acceptor electron. The default
-            is 0.
-
+            Number of nuclei which couple to the acceptor electron. The
+            default is 0.
         """
         if isinstance(spin, list):
             spin = cp.array(spin, dtype=CUPY_FLOAT)
@@ -172,14 +220,14 @@ class Hamiltonian:
 
     def set_HFI(self, theta: cp.array, phi: cp.array):
         r"""
-        Set up the hyperfine Hamiltonian for multiple nuclei with one electron.
+        Set up the Hyperfine (HFI) Hamiltonian for multiple nuclei on GPU.
 
         .. math::
 
-            \hat{\mathcal{H}}_{\mathrm{HF}} &= \sum_i{\mathbf{
-                \overrightarrow{S}A_i\overrightarrow{I_i}}}\\
-                &= \sum_i\sum_{m}\sum_{n}a_{i,mn}\cdot\overrightarrow{S}_{m}
-                \cdot\overrightarrow{I}_n
+        \hat{\mathcal{H}}_{\mathrm{HF}} &= \sum_i{\mathbf{
+        \overrightarrow{S}A_i\overrightarrow{I_i}}} \\
+        &= \sum_i\sum_{m}\sum_{n}a_{i,mn}\cdot\overrightarrow{S}_{m}
+        \cdot\overrightarrow{I}_n
 
         with:
 
@@ -187,13 +235,13 @@ class Hamiltonian:
 
             m, n \in\{x, y, z\}
 
+
         Parameters
         ----------
         theta : cp.array
-            Angle in radian.
+            Theta angles in radians.
         phi : cp.array
-            Angle in radian.
-
+            Phi angles in radians.
         """
         if self._SI is None or self._multiplicity == 1:
             self._HFI = cp.zeros((theta.size, 4, 4), dtype=CUPY_CMPLX)
@@ -221,17 +269,16 @@ class Hamiltonian:
 
     def set_exchange(self, J_ex: float) -> None:
         r"""
-        Set up the Hamiltonian for the exchange coupling.
+        Set up the Hamiltonian for the exchange coupling on GPU.
 
         .. math::
 
-            \hat{\mathcal{H}}_{\mathrm{ex}} = -2J\cdot \hat{S}_1\cdot \hat{S}_2
+           \hat{\mathcal{H}}_{\mathrm{ex}} = -2J\cdot \hat{S}_1\cdot \hat{S}_2
 
         Parameters
         ----------
         J_ex : float
-            Exchange coupling.
-
+            Exchange coupling constant.
         """
         self._changed_ex = True
         self._exchange = J_ex * (
@@ -240,15 +287,15 @@ class Hamiltonian:
 
     def set_dipolar(self, D: float, E: float) -> None:
         r"""
-        Set up the D/ZFS tensor.
+        Set up the Dipolar/Zero-Field Splitting (ZFS) tensor on GPU.
 
         .. math::
 
-            \mathbf{D} =\begin{bmatrix}
-                            -D+E & 0   & 0 \\
-                            0   & -D-E & 0 \\
-                            0   & 0   & 2\cdot D
-                        \end{bmatrix}
+        \mathbf{D} = \begin{bmatrix}
+        -D+E & 0   & 0 \\
+        0   & -D-E & 0 \\
+        0   & 0   & 2\cdot D
+        \end{bmatrix}
 
         Parameters
         ----------
@@ -256,7 +303,6 @@ class Hamiltonian:
             D value of the zero field splitting.
         E : float
             E value of the zero field splitting.
-
         """
         self._changed_dip = True
         self._dipolar = cp.array([-D + E, -D - E, 2 * D], dtype=CUPY_FLOAT) * cp.eye(
@@ -264,6 +310,19 @@ class Hamiltonian:
         )
 
     def set_DIP(self, theta, phi) -> None:
+        """
+        Set up the Dipolar interaction Hamiltonian on GPU.
+
+        Rotates the dipolar tensor according to the given angles and calculates
+        the interaction term.
+
+        Parameters
+        ----------
+        theta : cp.array
+            Theta angles in radians.
+        phi : cp.array
+            Phi angles in radians.
+        """
         if self._dipolar is None:
             return cp.zeros((theta.size, 4, 4), dtype=CUPY_CMPLX)
 
@@ -277,17 +336,36 @@ class Hamiltonian:
     def get_symmetry(self) -> str:
         # TODO: Funktion erstellen und Tests schreiben.
         """
-        Get the SO(3) group of the hamiltonian.
+        Get the SO(3) point group symmetry of the Hamiltonian on GPU.
 
         Returns
         -------
-        symmetry: str
-            SO(3) group.
-
+        str
+            The SO(3) group identifier. Currently defaults to ``"Ci"``.
         """
         return "Ci"
 
-    def get(self, field, theta, phi):
+    def get(self, field, theta, phi) -> cp.array:
+        """
+        Calculate and return the total Hamiltonian matrix on GPU.
+
+        Caches the result if neither the interaction parameters nor the
+        field/orientation have changed since the last call.
+
+        Parameters
+        ----------
+        field : cp.array, shape (N,)
+            Magnetic field values.
+        theta : cp.array, shape (N,)
+            Theta angles in radians.
+        phi : cp.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        cp.array, shape (N, M, M)
+            The total Hamiltonian matrix for each orientation/field point.
+        """
         if field.dtype != CUPY_FLOAT:
             field = field.astype(CUPY_FLOAT)
         same_theta = cp.array_equal(theta, self._theta)
@@ -332,7 +410,26 @@ class Hamiltonian:
 
         return self._matrix
 
-    def get_eigen(self, field, theta, phi):
+    def get_eigen(self, field, theta, phi) -> tuple[cp.array, cp.array]:
+        """
+        Return the eigenvalues and eigenvectors of the Hamiltonian on GPU.
+
+        Parameters
+        ----------
+        field : cp.array, shape (N,)
+            Magnetic field values.
+        theta : cp.array, shape (N,)
+            Theta angles in radians.
+        phi : cp.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        eigenvalues : cp.array, shape (N, M)
+            Eigenvalues of the Hamiltonian.
+        eigenvectors : cp.array, shape (N, M, M)
+            Corresponding eigenvectors.
+        """
         self.get(field, theta, phi)
         if self._eigenvectors is None:
             self._eigenvalues, self._eigenvectors = cp.linalg.eigh(
@@ -340,13 +437,47 @@ class Hamiltonian:
             )
         return self._eigenvalues, self._eigenvectors
 
-    def get_eigenvalues(self, field, theta, phi):
+    def get_eigenvalues(self, field, theta, phi) -> cp.array:
+        """
+        Return only the eigenvalues of the Hamiltonian on GPU.
+
+        Parameters
+        ----------
+        field : cp.array, shape (N,)
+            Magnetic field values.
+        theta : cp.array, shape (N,)
+            Theta angles in radians.
+        phi : cp.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        cp.array, shape (N, M)
+            Eigenvalues of the Hamiltonian.
+        """
         self.get(field, theta, phi)
         if self._eigenvalues is None:
             self._eigenvalues = cp.linalg.eigvalsh(cp.round(self._matrix, decimals=1))
         return self._eigenvalues
 
-    def get_eigenvectors(self, field, theta, phi):
+    def get_eigenvectors(self, field, theta, phi) -> cp.array:
+        """
+        Return only the eigenvectors of the Hamiltonian on GPU.
+
+        Parameters
+        ----------
+        field : cp.array, shape (N,)
+            Magnetic field values.
+        theta : cp.array, shape (N,)
+            Theta angles in radians.
+        phi : cp.array, shape (N,)
+            Phi angles in radians.
+
+        Returns
+        -------
+        cp.array, shape (N, M, M)
+            Eigenvectors of the Hamiltonian.
+        """
         self.get(field, theta, phi)
         if self._eigenvectors is None:
             self._eigenvalues, self._eigenvectors = cp.linalg.eigh(
@@ -357,6 +488,12 @@ class Hamiltonian:
     @classmethod
     @cp.memoize()
     def _init_coupled_electron_spins(self) -> cp.array:
+        """
+        Initialize spin matrices for the coupled electron system on GPU.
+
+        Calculates and caches the total spin vectors and their products
+        (e.g., :math:`S_1 \cdot S_2`) for the two coupled electrons.
+        """
         sigma_x, sigma_y, sigma_z = self._get_spin_matrices(0.5)
 
         pauli = cp.array([sigma_x, sigma_y, sigma_z], dtype=CUPY_CMPLX)
@@ -370,9 +507,9 @@ class Hamiltonian:
     @cp.memoize()
     def _get_spin_matrices(self, S: float = 0.5) -> list[cp.array, cp.array, cp.array]:
         r"""
-        Get the spin matrices for a given spin.
+        Calculate the spin matrices for a given spin quantum number on GPU.
 
-        Calculates the spin matrices for a given spin using:
+        Uses the standard ladder operator approach:
 
         .. math::
 
@@ -412,12 +549,11 @@ class Hamiltonian:
         Returns
         -------
         s_x : cp.array
-            :math:`\\hat{S}_{x}` spin matrix.
+            :math:`\hat{S}_{x}` spin matrix.
         s_y : cp.array
-            :math:`\\hat{S}_{y}` spin matrix.
+            :math:`\hat{S}_{y}` spin matrix.
         s_z : cp.array
-            :math:`\\hat{S}_{z}` spin matrix.
-
+            :math:`\hat{S}_{z}` spin matrix.
         """
         # Multiplicity M
         M = int(2 * S + 1)
@@ -444,9 +580,9 @@ class Hamiltonian:
     @cp.memoize()
     def _get_coupled_spin_matrices(self, *spins: float) -> cp.array:
         r"""
-        Calculate all spin matrices for a coupled system.
+        Calculate spin matrices for a system of multiple coupled spins on GPU.
 
-        All spins are coupled into the same product basis.
+        All spins are coupled into the same product basis:
 
         .. math::
 
@@ -483,14 +619,13 @@ class Hamiltonian:
         Parameters
         ----------
         *spins : float
-            All spin quantum numbers for all coupled spins.
+            Spin quantum numbers for all coupled spins.
 
         Returns
         -------
-        spin_matrices : cp.array
-            Spin vectors for each coupled spin. Same order as corresponding
-            spin.
-
+        cp.array
+            Array of spin vectors for each coupled spin, in the same order
+            as the input spins.
         """
         spins = cp.array(spins)
         dims = (2 * spins + 1).astype(int)
@@ -517,12 +652,9 @@ def rotate_tensor(
     tensor: cp.array, phi: cp.array, theta: cp.array, psi: cp.array = None
 ) -> cp.array:
     r"""
-    Algorithm:
-    Euler transformation using y-convention. The euler matrix is set up
-    with the given angles. Phi and theta is necessary, psi is optional.
-    The euler matrix O of the SO(3) Group in y-convention is set up in already
-    multiplicated form. Than the orthogonal similarity transformation of the
-    tensor T is carried out:
+    Rotate a tensor using Euler transformation in y-convention on GPU.
+
+    Performs an orthogonal similarity transformation of the tensor:
 
     .. math::
 
@@ -538,20 +670,18 @@ def rotate_tensor(
     Parameters
     ----------
     tensor : cp.array
-        Tensor which should be rotated using Euler transformation
-        (y-convention).
-    phi : float
-        Phi angle in radian for transformation.
-    theta : float
-        Theta angle in radian for transformation.
-    psi : float, optional
-        Psi angle in radian for transformation. The default is None.
+        Tensor to be rotated. Can be 2D or 3D.
+    phi : float or cp.array
+        Phi angle(s) in radians.
+    theta : float or cp.array
+        Theta angle(s) in radians.
+    psi : float or cp.array, optional
+        Psi angle(s) in radians. If None, defaults to zero.
 
     Returns
     -------
-    rotatedTensor : cp.array
-        Rotated tensor.
-
+    cp.array
+        The rotated tensor.
     """
     if psi is None:
         psi = cp.zeros(phi.size, dtype=CUPY_FLOAT)
