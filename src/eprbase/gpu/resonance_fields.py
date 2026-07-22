@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Resonance field calculation utilities for GPU-accelerated EPR simulations.
 
+This module provides the :class:`ResonanceFields` class to calculate resonance
+fields, intensities, linewidths, and transition indices for EPR spectra simulations
+using CuPy for GPU acceleration and adaptive spline interpolation.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
-from scipy.interpolate import interp1d, PPoly  # Ersetzen
+from scipy.interpolate import PPoly  # Ersetzen
 from copy import deepcopy
 import numpy as np
 import cupy as cp
-from cupyx.scipy.interpolate import CubicHermiteSpline
+from cupyx.scipy.interpolate import CubicHermiteSpline, interp1d
 import matplotlib.pyplot as plt
 from scipy.constants import physical_constants
 from time import time
@@ -33,6 +37,24 @@ class ResonanceFields:
         rho: cp.array,
         testing: bool = False,
     ):
+        """
+        Initialize the resonance field calculator on GPU.
+
+        Parameters
+        ----------
+        Hamiltonian : object
+            Hamiltonian object for energy calculations
+        Grid : object
+            Grid object for orientation sampling
+        b_field : cp.array
+            Magnetic field range
+        nu : cp.array
+            Frequency range
+        rho : cp.array
+            Density matrix
+        testing : bool, optional
+            Enable testing mode, by default False
+        """
         self._ham = Hamiltonian
         self._proj = self._ham.get_proj().astype(CUPY_CMPLX)
         self._grid = Grid.get_grid(Grid._symmetry).astype(CUPY_FLOAT)
@@ -57,21 +79,18 @@ class ResonanceFields:
 
     def get_res_fields(self) -> list[cp.array, cp.array, cp.array, cp.array]:
         """
-        Get the resonance fields.
+        Calculate resonance fields for all grid points on GPU.
 
         Returns
         -------
-        res_fields : cp.array, (N,)
-            Resonance fields.
-        intensities : cp.array, (N,)
-            Intensity of the transition.
-        width : cp.array, (N,)
-            Gaussian linewidth.
-        transition : cp.array, (N, 2)
-            Level indices for each transition. [0, 1] represents the transition
-            from the lowest level to the second lowest. [1, 0] the opposite
-            direction.
-
+        res_fields : list of cp.array
+            Resonance fields for each grid point
+        intensities : list of cp.array
+            Intensities for each transition
+        widths : list of cp.array
+            Linewidths for each transition
+        transition : list of cp.array
+            Transition indices for each transition
         """
         start = time()
         res_fields_t, intensities_t, widths_t, transition_t = [], [], [], []
@@ -110,17 +129,17 @@ class ResonanceFields:
 
     def res_field_plot(self, point: int) -> None:
         """
-        Plot the levels diagram and mark each resonance field.
+        Plot energy level diagram with resonance fields on GPU.
 
         Parameters
         ----------
         point : int
-            Orientation index used for the grid point.
+            Grid point index to plot
 
         Returns
         -------
-        None.
-
+        tuple
+            (res_fields, intensities, transition, energy_levels, field)
         """
         _, theta, phi = self._grid[point]
         energy_levels, pop, trans_prob = self._adaptive_spline(theta, phi)
@@ -161,23 +180,14 @@ class ResonanceFields:
 
     def levels_plot(self, point: int, bisections: bool = False) -> None:
         """
-        Plot the energy levels.
-
-        The linewidth corresponds to the population of the energy level. Dashed
-        lines show unpopulated levels.
+        Plot energy levels with population indication on GPU.
 
         Parameters
         ----------
         point : int
-            Orientation index used for the grid point.
+            Grid point index to plot
         bisections : bool, optional
-            If True, the field points used for the iterative bisection
-            algorithm will be plotted as vertical lines. The default is False.
-
-        Returns
-        -------
-        None
-
+            Show bisection points, by default False
         """
         _, theta, phi = self._grid[point]
         energy_levels, pop, trans_prob = self._adaptive_spline(theta, phi)
@@ -207,7 +217,13 @@ class ResonanceFields:
     def _get_transitions(self):
         # TODO: Ordentlich machen
         # Die Ergebnisse hiervon können für adaptive spline genutzt werden!
-        """Get all transition indices."""
+        """
+        Calculate all possible transition indices on GPU.
+
+        Notes
+        -----
+        Sets self._transitions attribute.
+        """
         field = cp.array(
             [(self._field.min() + self._field.max()) / 2], dtype=CUPY_FLOAT
         )
@@ -260,7 +276,7 @@ class ResonanceFields:
         self, grid_point: int
     ) -> list[cp.array, cp.array, cp.array, cp.array]:
         """
-        Get the resonance fields for one grid point.
+        Calculate resonance fields for a single grid point on GPU.
 
         Parameters
         ----------
@@ -392,18 +408,17 @@ class ResonanceFields:
 
     def _get_splines(self, knots: cp.array) -> object:
         """
-        Get the splines for each energy level as a CubicHermiteSpline object.
+        Create cubic spline interpolators for energy levels on GPU.
 
         Parameters
         ----------
-        knots : cp.array, (M, N, 3)
-            Calculated knots with their energies and gradients.
+        knots : cp.array
+            Energy level data points
 
         Returns
         -------
-        object
-            scipy.interpolate.CubicHermiteSpline object.
-
+        CubicHermiteSpline
+            Energy level splines
         """
         knots = knots[knots[:, 0, 0].argsort()]  # sort along field axis
         field = knots[:, 0, 0]
@@ -421,40 +436,37 @@ class ResonanceFields:
 
     def _get_trans_prob_interp(self, field: cp.array, trans_prob: cp.array) -> object:
         """
-        Interpolate the transition probability along the field axis.
+        Create transition probability interpolator on GPU.
 
         Parameters
         ----------
-        field : cp.array, (M,)
-            Magnetic field points.
-        trans_prob : cp.array, (M, N, N)
-            Corresponding transition probabilities.
+        field : cp.array
+            Field points
+        trans_prob : cp.array
+            Transition probabilities
 
         Returns
         -------
         object
-            Linear interpolator for the populations of each energy level.
-
+            Linear interpolator
         """
-        # TODO: interp1d ersetzen zu CuPy
-        return interp1d(field.get(), trans_prob.get(), axis=0, fill_value="extrapolate")
+        return interp1d(field, trans_prob, axis=0, fill_value="extrapolate")
 
     def _get_pop_interp(self, field: cp.array, eigvecs: cp.array) -> object:
         """
-        Interpolate the populations along the field axis.
+        Create population interpolator on GPU.
 
         Parameters
         ----------
-        field : cp.array, (M,)
-            Magnetic field points.
-        eigvecs : cp.array, (M, M)
-            Corresponding eigenvectors.
+        field : cp.array
+            Field points
+        eigvecs : cp.array
+            Eigenvectors
 
         Returns
         -------
         object
-            Linear interpolator for the populations of each energy level.
-
+            Linear interpolator
         """
         eigvecs_T = cp.einsum("aij -> aji", eigvecs, dtype=CUPY_CMPLX)
         eigvecs_inv = cp.linalg.inv(eigvecs_T)
@@ -465,12 +477,11 @@ class ResonanceFields:
 
         pop = cp.einsum("ajj -> aj", pop).real
 
-        # TODO: interp1d ersetzen zu CuPy
-        return interp1d(field.get(), pop.get(), axis=0, fill_value="extrapolate")
+        return interp1d(field, pop, axis=0, fill_value="extrapolate")
 
     def _get_transition_probabilities(self, eigvecs: cp.array) -> cp.array:
         """
-        Get the transition probabilties matrix.
+        Calculate transition probabilities on GPU.
 
         The matrix contains the transitions probabilities for each eigenvector
         combination. The probability for the transition eigenvector[i] ->
@@ -513,7 +524,7 @@ class ResonanceFields:
         transitions: cp.array,
     ) -> cp.array:
         """
-        Calculate the intensities for the given resonance fields.
+        Calculate transition intensities on GPU.
 
         Parameters
         ----------
@@ -535,9 +546,7 @@ class ResonanceFields:
         """
         delta_pop = self._get_delta_pop(field, population, transitions)
 
-        # TODO: nach interp1d ersetzen zu CuPy kann cp.array und get() entfernt
-        # werden
-        trans = cp.array(trans_prob(field.get()), dtype=CUPY_FLOAT)
+        trans = trans_prob(field)
 
         i = range(transitions.shape[0])
         tp = trans[i, transitions[i, 0], transitions[i, 1]]
@@ -547,7 +556,7 @@ class ResonanceFields:
         self, field: cp.array, population: object, transitions: cp.array
     ) -> cp.array:
         """
-        Get the population differences for each transition.
+        Calculate population differences for transitions on GPU.
 
         Parameters
         ----------
@@ -565,9 +574,7 @@ class ResonanceFields:
             Population difference for each transition.
 
         """
-        # TODO: nach interp1d ersetzen zu CuPy kann cp.array und get() entfernt
-        # werden
-        pops = cp.array(population(field.get()), dtype=CUPY_FLOAT)
+        pops = population(field)
         i = range(field.size)
         return pops[i, transitions[:, 0]] - pops[i, transitions[:, 1]]
 
@@ -579,7 +586,7 @@ class ResonanceFields:
         transition: list,
     ) -> list[list, list, list, list]:
         """
-        Sanitize the results.
+        Sanitize results by removing invalid transitions on GPU.
 
         Remove all transitions where not at least one angle has an intensity
         above self._int_thrsld. Also adds missing transitions if an angle has
@@ -704,23 +711,21 @@ class ResonanceFields:
         self, trans_prob: object, population: object, transitions: cp.array
     ) -> cp.array:
         """
-        Filter the transitions by their transition rates at B_center.
+        Filter transitions by transition rates at center field on GPU.
 
         Parameters
         ----------
         trans_prob : object
-            Interpolator for the transition probabilities.
+            Transition probability interpolator
         population : object
-            Linear interpolator for the populations of each energy level along
-            the field axis.
-        transitions : cp.array, (M, 2)
-            Indices for each transition.
+            Population interpolator
+        transitions : cp.array
+            Transition indices
 
         Returns
         -------
-        transitions : cp.array, (N, 2)
-            Indices for each transition.
-
+        cp.array
+            Filtered transitions
         """
         B_center = cp.ones(transitions.shape[0], dtype=CUPY_FLOAT) * (
             (self._field.min() + self._field.max()) / 2
@@ -731,8 +736,7 @@ class ResonanceFields:
         transitions = transitions[abs(delta_pop) > self._pop_trshld]
 
         # Filter by transition probability
-        # TODO: trans_prob(B_center[0]) , wenn interp1d in CuPy
-        trans_probs = cp.array(trans_prob(B_center[0].get()), dtype=CUPY_FLOAT)
+        trans_probs = trans_prob(B_center[0])
         transitions = transitions[
             trans_probs[transitions[:, 0], transitions[:, 1]] > self._trans_prob_trshld
         ]
@@ -747,30 +751,29 @@ class ResonanceFields:
         transitions: cp.array,
     ) -> list[cp.array, cp.array, cp.array]:
         """
-        Filter transitions by their intensity.
+        Filter transitions by intensity on GPU.
 
         Parameters
         ----------
-        field : cp.array, (M,)
-            Resonance field for each transition.
-        intensities : cp.array, (M,)
-            Peak intensity at the resonance field for each transition.
+        field : cp.array
+            Resonance fields
+        intensities : cp.array
+            Transition intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : cp.array, (M, 2)
-            Indices for each transition.
+            Energy difference splines
+        transitions : cp.array
+            Transition indices
 
         Returns
         -------
-        field : cp.array, (N,)
-            Resonance field for each transition.
-        intensities : cp.array, (N,)
-            Peak intensity at the resonance field for each transition.
+        field : cp.array
+            Filtered fields
+        intensities : cp.array
+            Filtered intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : cp.array, (N, 2)
-            Indices for each transition.
-
+            Updated splines
+        transitions : cp.array
+            Filtered transitions
         """
         idx = abs(intensities) > self._int_trshld
         delta_E.c = delta_E.c[:, :, idx]
@@ -785,30 +788,29 @@ class ResonanceFields:
     ) -> list[cp.array, cp.array, cp.array]:
         # TODO: max_spread einführen!
         """
-        Filter transitions by their field position.
+        Filter transitions by field position on GPU.
 
         Parameters
         ----------
-        field : cp.array, (M,)
-            Resonance field for each transition.
-        intensities : cp.array, (M,)
-            Peak intensity at the resonance field for each transition.
+        field : cp.array
+            Resonance fields for each transition
+        intensities : cp.array
+            Intensities for each transition
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : cp.array, (M, 2)
-            Indices for each transition.
+            Energy difference splines
+        transitions : cp.array
+            Transition indices
 
         Returns
         -------
-        field : cp.array, (N,)
-            Resonance field for each transition.
-        intensities : cp.array, (N,)
-            Peak intensity at the resonance field for each transition.
+        field : cp.array
+            Filtered resonance fields
+        intensities : cp.array
+            Filtered intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : cp.array, (N, 2)
-            Indices for each transition.
-
+            Updated splines
+        transitions : cp.array
+            Filtered transitions
         """
         max_spread = (0.5**2 / cp.log(2, dtype=CUPY_FLOAT)) * 3
         max_spread *= 1e-3 * mu_b
@@ -822,20 +824,19 @@ class ResonanceFields:
         self, splines: CubicHermiteSpline, transitions: cp.array
     ) -> CubicHermiteSpline:
         """
-        Construct the delta functions of each splines pair.
+        Calculate energy difference splines on GPU.
 
         Parameters
         ----------
         splines : CubicHermiteSpline
-            Spline functions.
-        transitions : cp.array, (M, 2)
-            Indices for each transition.
+            Energy level splines
+        transitions : cp.array
+            Transition indices
 
         Returns
         -------
         CubicHermiteSpline
-            Delta spline functions.
-
+            Energy difference splines
         """
         delta_splines = deepcopy(splines)
         coeff = splines.c
@@ -852,20 +853,19 @@ class ResonanceFields:
 
     def _get_linewidths(self, field: cp.array, delta_E: CubicHermiteSpline) -> cp.array:
         """
-        Calculate the gaussian linewidth for each resonance field.
+        Calculate linewidths for transitions on GPU.
 
         Parameters
         ----------
-        field : cp.array, (M,)
-            Resonance field for each transition.
+        field : cp.array
+            Resonance fields
         delta_E : CubicHermiteSpline
-            Delta spline functions.
+            Energy difference splines
 
         Returns
         -------
-        linewidths : cp.array, (M,)
-            Linewidth for each resonance field.
-
+        cp.array
+            Linewidths for each transition
         """
         linewidths = 1 / cp.diag(delta_E.derivative()(field).astype(CUPY_FLOAT))
 
@@ -873,18 +873,17 @@ class ResonanceFields:
 
     def _get_start_segments(self, n_angles: int) -> cp.array:
         """
-        Get the start segments of each angle for the adaptive spline algorithm.
+        Get initial segments for adaptive spline algorithm on GPU.
 
         Parameters
         ----------
         n_angles : int
-            Number of angles.
+            Number of angles
 
         Returns
         -------
-        cp.array, (n_angles,)
-            Array containing the start segment for each angle.
-
+        cp.array
+            Initial segments for each angle
         """
         return cp.linspace(2 * n_angles, 3 * n_angles - 1, n_angles, dtype=cp.uint32)
 
@@ -892,24 +891,23 @@ class ResonanceFields:
         self, theta: cp.array, phi: cp.array
     ) -> list[cp.array, cp.array]:
         """
-        Get the eigenvalues and eigenvectors for the initial points.
+        Get initial eigenvalues and eigenvectors on GPU.
 
         Parameters
         ----------
-        theta : cp.array, (N,)
-            Theta angles.
-        phi : cp.array, (N,)
-            Phi angles.
+        theta : cp.array
+            Theta angles
+        phi : cp.array
+            Phi angles
 
         Returns
         -------
-        knots : cp.array, (2*N, M, 3)
-            Evaluated segments for each angle.
-        eigvec_field : cp.array, (2*N,)
+        knots : cp.array
+            Evaluated segments for each angle
+        eigvec_field : cp.array
             Field values for all eigenvectors
-        eigvec_vec : cp.array, (2*N, M, M)
-            Eigenvectors for all angles.
-
+        eigvec_vec : cp.array
+            Eigenvectors for all angles
         """
         fields = cp.tile(
             cp.array([self._min_field, self._max_field], dtype=CUPY_FLOAT),
@@ -924,7 +922,7 @@ class ResonanceFields:
         self, values: cp.array, idx_left: cp.array, idx_right: cp.array
     ) -> cp.array:
         r"""
-        Get the estimated energies at the center of the spline segments.
+        Calculate estimated energies at segment centers on GPU.
 
         Those estimated energies will be compared to the exact values to
         determine if the adaptive spline algorithm is converged.
@@ -958,7 +956,7 @@ class ResonanceFields:
 
     def _get_spline_error(self, calculated: cp.array, expected: cp.array) -> cp.array:
         r"""
-        Get the maximum field error for each segment.
+        Calculate maximum field error for each segment on GPU.
 
         .. math::
 
@@ -987,13 +985,12 @@ class ResonanceFields:
 
     def _get_new_indexes(self) -> cp.array:
         """
-        Get the indexes of the new points.
+        Get indices of new points on GPU.
 
         Returns
         -------
-        cp.array, (N,)
-            Indexes of the new points.
-
+        cp.array
+            Indices of new points
         """
         start_idx = cp.sum(self._n_tot_centers).get()
         n_idx = cp.sum(self._n_new_centers).get()
@@ -1001,31 +998,27 @@ class ResonanceFields:
 
     def _get_start_neighbors(self, N: int) -> cp.array:
         """
-        Get the indexes of the left and right neighbors at the start.
+        Get initial neighbors for each angle on GPU.
 
         Parameters
         ----------
         N : int
-            Number of grid angles.
+            Number of grid angles
 
         Returns
         -------
-        cp.array, (N, 2)
-            Index of the left and right neighbor for each angle.
-
+        cp.array
+            Index of left and right neighbor for each angle
         """
         return cp.linspace(0, 2 * N - 1, 2 * N, dtype=cp.uint32).reshape((N, 2))
 
     def _set_idx_man_map(self) -> None:
         """
-        Set the map between indexes of the new points and the index managers.
+        Set mapping between new point indices and index managers on GPU.
 
-        The result will be saved in self._idx_man_map
-
-        Returns
-        -------
-        None
-
+        Notes
+        -----
+        Sets self._idx_man_map attribute.
         """
         self._idx_man_map = cp.empty(self._n_new_centers.sum().get(), dtype=cp.uint32)
 
@@ -1039,15 +1032,11 @@ class ResonanceFields:
 
     def _update_idx_managers(self) -> None:
         """
-        Update the index managers.
+        Update index managers with new segments on GPU.
 
-        This function inserts the indices of the new segments between their
-        neighbors. self._idx_managers will be updated.
-
-        Returns
-        -------
-        None
-
+        Notes
+        -----
+        Updates self._idx_managers attribute.
         """
         for i, man_id in enumerate(self._idx_man_map):
             self._idx_managers[man_id.get()].add_index(
@@ -1058,18 +1047,12 @@ class ResonanceFields:
 
     def _set_new_indexes(self, converged: cp.array) -> None:
         """
-        Set the indexes of the new segments and their neighbors.
+        Set indices of new segments and their neighbors on GPU.
 
         Parameters
         ----------
-        converged : cp.array, (N,)
-            Boolean array, which contains the convergence status of each
-            segment.
-
-        Returns
-        -------
-        None
-
+        converged : cp.array
+            Boolean array indicating convergence status of each segment
         """
         # Construct new neighbors
         left = cp.column_stack(
@@ -1098,18 +1081,12 @@ class ResonanceFields:
 
     def _set_n_new_centers(self, converged: cp.array) -> None:
         """
-        Update self._n_new_centers.
+        Update number of new centers for each angle on GPU.
 
         Parameters
         ----------
-        converged : cp.array, (N,)
-            Boolean array, which contains the convergence status of each
-            segment.
-
-        Returns
-        -------
-        None
-
+        converged : cp.array
+            Boolean array indicating convergence status of each segment
         """
         if (~converged).sum() > 0:
             self._n_new_centers = 2 * cp.bincount(
@@ -1122,7 +1099,7 @@ class ResonanceFields:
         self, values: cp.array, theta, phi
     ) -> list[cp.array, cp.array]:
         """
-        Evaluate all segments.
+        Evaluate all segments and calculate new points on GPU.
 
         Calculate all eigenvalues and eigenvectors for the new segments and
         determine the convergence status.
@@ -1177,7 +1154,7 @@ class ResonanceFields:
         self, theta: cp.array, phi: cp.array
     ) -> list[CubicHermiteSpline, object, object]:
         """
-        Get a cubic spline representation for each energy level.
+        Calculate energy level splines using adaptive spline algorithm on GPU.
 
         This function uses the adaptive bisection algorithm. All angles get
         evaluated in parallel.
@@ -1191,12 +1168,12 @@ class ResonanceFields:
 
         Returns
         -------
-        CubicHermiteSpline
-            Spline representation of the energy levels.
-        object
-            Linear interpolator for the populations.
-        object
-            Linear interpolator for the transition probabilities.
+        all_splines : list
+            Energy level splines for each angle
+        all_population : list
+            Population interpolators for each angle
+        all_trans_prob : list
+            Transition probability interpolators for each angle
 
         """
         theta, phi = cp.array([theta]), cp.array([phi])  # TODO: entfernen
@@ -1259,18 +1236,27 @@ class ResonanceFields:
 
     def _get_multi_single_res_fields(self, energy_levels, pop, trans_prob) -> cp.array:
         """
-        Get the resonance fields for one grid point.
+        Calculate resonance fields for multiple grid points on GPU.
 
         Parameters
         ----------
-        grid_point : int
-            Index of the angles in self._grid.
+        energy_levels : list
+            Energy level splines for each grid point
+        pop : list
+            Population interpolators for each grid point
+        trans_prob : list
+            Transition probability interpolators for each grid point
 
         Returns
         -------
-        res_fields : cp.array, (N, 4)
-            Resonance fields for one angle on the sphere.
-
+        res_fields : cp.array
+            Resonance fields for all grid points
+        intensities : cp.array
+            Intensities for all transitions
+        widths : cp.array
+            Linewidths for all transitions
+        transition : cp.array
+            Transition indices for all transitions
         """
         transition = self._transitions.copy()
         delta_energy = self._get_delta_splines(energy_levels, transition)
@@ -1299,7 +1285,7 @@ class ResonanceFields:
         n_points: cp.array,
     ) -> list[cp.array, tuple[cp.array, cp.array]]:
         """
-        Get the energies and gradients for the given field points.
+        Calculate energy levels and gradients for given fields on GPU.
 
         Parameters
         ----------
@@ -1339,7 +1325,9 @@ class ResonanceFields:
         return knots, (eigvec_field, eigvec)
 
     def _init_idx_managers(self) -> None:
-        """Initalize the IndexManager for each orientation."""
+        """
+        Initialize index managers for each orientation on GPU.
+        """
         n_theta = self._grid.shape[0]
         idx_left = 2 * cp.linspace(0, n_theta - 1, n_theta, dtype=cp.uint32)
         self._idx_managers = [IndexManager(idx, idx + 1) for idx in idx_left.get()]
@@ -1348,9 +1336,14 @@ class ResonanceFields:
 class IndexManager:
     def __init__(self, left_boundary, right_boundary):
         """
-        Initialisiert die Klasse mit festen Grenzen.
-        :param left_boundary: Der linke feste Grenz-Indize
-        :param right_boundary: Der rechte feste Grenz-Indize
+        Initialize index manager with fixed boundaries on GPU.
+
+        Parameters
+        ----------
+        left_boundary : int
+            Left fixed boundary index
+        right_boundary : int
+            Right fixed boundary index
         """
         if left_boundary >= right_boundary:
             raise ValueError("Left boundary must be smaller than right boundary.")
@@ -1364,10 +1357,16 @@ class IndexManager:
 
     def add_index(self, index, left_neighbor, right_neighbor):
         """
-        Fügt einen neuen Indize hinzu und sortiert ihn entsprechend ein.
-        :param index: Der neue Indize
-        :param left_neighbor: Der linke Nachbar des neuen Indizes
-        :param right_neighbor: Der rechte Nachbar des neuen Indizes
+        Add new index between existing neighbors on GPU.
+
+        Parameters
+        ----------
+        index : int
+            New index to add
+        left : int
+            Left neighbor index
+        right : int
+            Right neighbor index
         """
         if int(index) in self.indices:
             raise ValueError(f"Index {index} already exists.")
@@ -1396,9 +1395,22 @@ class IndexManager:
 
     def get_neighbors(self, index):
         """
-        Gibt die Nachbarn eines Indizes zurück.
-        :param index: Der Indize, dessen Nachbarn abgefragt werden
-        :return: Ein Tupel (linker Nachbar, rechter Nachbar)
+        Get the left and right neighbors of a given index.
+
+        Parameters
+        ----------
+        index : int
+            The index whose neighbors are requested.
+
+        Returns
+        -------
+        tuple
+            (left_neighbor, right_neighbor) indices.
+
+        Raises
+        -----
+        ValueError
+            If the index doesn't exist in the structure.
         """
         if int(index) not in self.indices:
             raise ValueError(f"Index {index} does not exist.")
@@ -1407,6 +1419,14 @@ class IndexManager:
         return neighbors["left"], neighbors["right"]
 
     def order(self):
+        """
+        Get ordered list of indices on GPU.
+
+        Returns
+        -------
+        cp.array
+            Ordered indices
+        """
         order = []
         current = self.left_boundary
 
@@ -1417,7 +1437,12 @@ class IndexManager:
 
     def __str__(self):
         """
-        Gibt die aktuelle Reihenfolge der Indizes als String zurück.
+        Return the current order of indices as a string.
+
+        Returns
+        -------
+        str
+            String representation of the index order in format "index1 -> index2 -> ..."
         """
         order = []
         current = self.left_boundary

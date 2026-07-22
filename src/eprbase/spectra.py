@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+EPR spectra construction utilities.
 
+This module provides the :class:`Spectra` class to construct EPR spectra
+from transition data using either summation or projection methods. Supports
+both Gaussian lineshapes and convolution-based spectral construction.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
@@ -14,6 +18,29 @@ from scipy.special import erf
 
 
 class Spectra:
+    """
+    EPR spectra constructor.
+
+    Handles the construction of EPR spectra from transition data using
+    either summation or projection methods. Supports both Gaussian lineshapes
+    and convolution-based spectral construction.
+
+    Parameters
+    ----------
+    res_fields : list of np.array
+        Resonance fields for each transition (shape: (M, N))
+    intensities : list of np.array
+        Peak intensities for each transition (shape: (M, N))
+    widths : list of np.array
+        Linewidths for each transition (shape: (M, N))
+    transitions : list of np.array
+        Energy level indices for each transition (shape: (M, N, 2))
+    weights : np.array, optional
+        Orientation weights from grid.get_areas() (shape: (M,))
+    triangles : np.array, optional
+        Delaunay triangle indices from grid.get_triangle_idx() (shape: (P, 4))
+    """
+
     def __init__(
         self,
         res_fields: list,
@@ -28,21 +55,18 @@ class Spectra:
 
         Parameters
         ----------
-        res_fields : list, (M, N)
-            Resonance field of each transition.
-        intensities : list, (M, N)
-            Peak intensity of each transition.
-        widths : list, (M, N)
-            Linewidth of each peak.
-        transitions : list, (M, N, 2)
-            Energy level indices for each transition.
-        weights : np.array, (M,)
-            Weigth for each orientation used for the summation. Provided by
-            epr_grid.Grid().get_areas().
-        triangles : np.array, (P, 4)
-            Indices for each Delaunay triangle with its areas used for
-            projection. Provided by epr_grid.Grid().get_triangle_idx()
-
+        res_fields : list of np.array
+            Resonance fields for each transition (shape: (M, N))
+        intensities : list of np.array
+            Peak intensities for each transition (shape: (M, N))
+        widths : list of np.array
+            Linewidths for each transition (shape: (M, N))
+        transitions : list of np.array
+            Energy level indices for each transition (shape: (M, N, 2))
+        weights : np.array, optional
+            Orientation weights from grid.get_areas() (shape: (M,))
+        triangles : np.array, optional
+            Delaunay triangle indices from grid.get_triangle_idx() (shape: (P, 4))
         """
         self._res_fields = res_fields
         self._intensities = intensities
@@ -53,18 +77,17 @@ class Spectra:
 
     def by_summation(self, field: np.array) -> np.array:
         """
-        Construct the spectra by simple summation of each Gaussian.
+        Construct spectra by simple summation of Gaussian peaks.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field axis for the spectra.
+        field : np.array
+            Magnetic field axis for the spectra (shape: (M,))
 
         Returns
         -------
-        spectra : np.array, (M,)
-            EPR spectra.
-
+        np.array
+            EPR spectra (shape: (M,))
         """
         repeats = [len(arr) for arr in self._res_fields]
         weights = np.repeat(self._weights, repeats).astype(np.float32)[:, np.newaxis]
@@ -77,18 +100,17 @@ class Spectra:
 
     def by_projection(self, field: np.array) -> np.array:
         """
-        Construct the spectra by projection.
+        Construct spectra by projection onto Delaunay triangles.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field axis for the spectra.
+        field : np.array
+            Magnetic field axis for the spectra (shape: (M,))
 
         Returns
         -------
-        spectra : np.array, (M,)
-            EPR spectra.
-
+        np.array
+            EPR spectra (shape: (M,))
         """
         self._sort_by_transition()
         res_fields, intens, widths = self._get_points_for_projection()
@@ -108,19 +130,14 @@ class Spectra:
 
     def _sort_by_transition(self) -> None:
         """
-        Sort intensity, resonance field and linewidths for each transition.
+        Sort transition data by energy level indices.
 
-        axis=0 : transitions, axis=1 : grid points.
-        Hence `self._sorted_intensities[0, 1]` will return the intensity of the
-        first transition at the second grid point.
-        `self._sorted_intensities[0]` returns all intensities for the first
-        transition. The order of the grid points is not affected by the
-        sorting.
+        Sorts intensities, resonance fields, and linewidths by transition indices
+        to prepare for projection method. Maintains original grid point ordering.
 
-        Returns
-        -------
-        None.
-
+        Notes
+        -----
+        After sorting, data is transposed to shape (grid_points, transitions).
         """
         sorting = np.lexsort(
             (
@@ -144,16 +161,16 @@ class Spectra:
 
     def _get_points_for_projection(self) -> list[np.array, np.array, np.array]:
         """
-        Get the intensities, resonance fields and linewidths for each triangle.
+        Prepare transition data for projection method.
 
         Returns
         -------
-        fields : np.array, (nTransitions, nTriangles, 3)
-            Resonance fields.
-        intens : np.array, (nTransitions, nTriangles, 3)
-            Intensities.
-        widths : np.array, (nTransitions, nTriangles, 3)
-            Linewidths.
+        fields : np.array
+            Resonance fields for each triangle edge (shape: (nTransitions, nTriangles, 3))
+        intens : np.array
+            Intensities for each triangle edge (shape: (nTransitions, nTriangles, 3))
+        widths : np.array
+            Linewidths for each triangle edge (shape: (nTransitions, nTriangles, 3))
         """
         idx = np.int32(self._triangles[:, 0:3])
         intens = self._sorted_intensities[:, idx]
@@ -170,24 +187,25 @@ class Spectra:
         widths: np.array,
     ) -> np.array:
         """
-        Construct the triangle spectrum for one Delaunay triangle.
+        Construct spectra for individual Delaunay triangles.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field axis for the spectra.
-        res_fields : np.array, (nTransitions, nTriangles, 3)
-            Resonance field for each edge of the Delaunay triangle.
-        intensities : np.array, (nTransitions, nTriangles, 3)
-            Intensity for each edge of the Delaunay triangle.
-        areas : np.array, (nTriangles)
-            Areas of the Delaunay triangles.
+        field : np.array
+            Magnetic field axis (shape: (M,))
+        res_fields : np.array
+            Resonance fields for triangle edges (shape: (nTransitions, nTriangles, 3))
+        intensities : np.array
+            Intensities for triangle edges (shape: (nTransitions, nTriangles, 3))
+        areas : np.array
+            Triangle areas (shape: (nTriangles,))
+        widths : np.array
+            Linewidths for triangle edges (shape: (nTransitions, nTriangles, 3))
 
         Returns
         -------
-        triangles : np.array
-            All subspectra for each transition and each Delaunay triangle.
-
+        np.array
+            Subspectra for each transition and triangle (shape: (nTransitions, nTriangles, M))
         """
         heigth = areas * intensities.sum(axis=2) / 3
         x = np.sort(res_fields)
@@ -253,6 +271,25 @@ class Spectra:
         return triangles
 
     def _get_single_gaussian(self, field, center, intensity, sigma):
+        """
+        Generate Gaussian lineshape for a single peak.
+
+        Parameters
+        ----------
+        field : np.array
+            Magnetic field axis (shape: (M,))
+        center : float
+            Peak center position
+        intensity : float
+            Peak intensity
+        sigma : float
+            Linewidth (FWHM)
+
+        Returns
+        -------
+        np.array
+            Gaussian lineshape (shape: (M,))
+        """
         sigma = sigma**2 / np.log(2)
         b = field - center
         gaussian = intensity * np.exp(-(b**2) / sigma)
@@ -266,23 +303,23 @@ class Spectra:
         sigma: np.array,
     ) -> np.array:
         """
-        Get the gaussian lineshape along the given field for multiple ones.
+        Generate Gaussian lineshapes for multiple peaks.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field axis.
-        center : np.array, (N,)
-            Center point of each gaussian.
-        intensity : np.array, (N,)
-            Peak intensity of each gaussian.
-        sigma : np.array, (N,)
-            FWHM of each gaussian.
+        field : np.array
+            Magnetic field axis (shape: (M,))
+        center : np.array
+            Peak center positions (shape: (N,))
+        intensity : np.array
+            Peak intensities (shape: (N,))
+        sigma : np.array
+            Linewidths (FWHM) (shape: (N,))
 
         Returns
         -------
-        gaussians : np.array, (N, M)
-            Gaussian lineshapes.
+        np.array
+            Gaussian lineshapes (shape: (N, M))
         """
         sigma = sigma.astype(np.float32)
         intensity = intensity.astype(np.float32)
@@ -299,6 +336,21 @@ class Spectra:
 
 
 def conv_function(x, gamma):
+    """
+    Convolution function for elementary spectra construction.
+
+    Parameters
+    ----------
+    x : np.array
+        Field values
+    gamma : float
+        Linewidth parameter
+
+    Returns
+    -------
+    np.array
+        Convolution result
+    """
     x_g = x / gamma
     F_x = np.exp(-2 * (x_g**2)) / (np.sqrt(2 * np.pi)) + x_g * (
         1 + erf(np.sqrt(2) * x_g)
@@ -307,6 +359,23 @@ def conv_function(x, gamma):
 
 
 def elementary_spec(field, y, gamma):
+    """
+    Construct elementary spectrum for triangular region.
+
+    Parameters
+    ----------
+    field : np.array
+        Magnetic field axis
+    y : np.array
+        Triangle edge positions
+    gamma : float
+        Linewidth parameter
+
+    Returns
+    -------
+    np.array
+        Elementary spectrum
+    """
     F_y1 = conv_function(field - y[0], gamma)
     F_y2 = conv_function(field - y[1], gamma)
     F_y2_ = conv_function(y[1] - field, gamma)

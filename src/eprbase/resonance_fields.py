@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Resonance field calculation utilities for EPR simulations.
 
+This module provides the :class:`ResonanceFields` class to calculate resonance
+fields, intensities, linewidths, and transition indices for EPR spectra simulations.
+Uses adaptive spline interpolation and transition probability analysis.
+
+© M. Sc. Florian Quintes, 2026.
 @contact: florian.quintes@pc.uni.freiburg.de
-
 @author: Florian Quintes
 """
 
@@ -19,6 +23,29 @@ mu_b, *_ = physical_constants["Bohr magneton in Hz/T"]
 
 
 class ResonanceFields:
+    """
+    Resonance field calculator for EPR simulations.
+
+    Handles the calculation of resonance fields, intensities, linewidths, and
+    transition indices using adaptive spline interpolation and transition
+    probability analysis.
+
+    Parameters
+    ----------
+    Hamiltonian : object
+        Hamiltonian object for energy calculations
+    Grid : object
+        Grid object for orientation sampling
+    b_field : np.array
+        Magnetic field range
+    nu : np.array
+        Frequency range
+    rho : np.array
+        Density matrix
+    testing : bool, optional
+        Enable testing mode, by default False
+    """
+
     def __init__(
         self,
         Hamiltonian: object,
@@ -28,6 +55,24 @@ class ResonanceFields:
         rho: np.array,
         testing: bool = False,
     ):
+        """
+        Initialize the resonance field calculator.
+
+        Parameters
+        ----------
+        Hamiltonian : object
+            Hamiltonian object for energy calculations
+        Grid : object
+            Grid object for orientation sampling
+        b_field : np.array
+            Magnetic field range
+        nu : np.array
+            Frequency range
+        rho : np.array
+            Density matrix
+        testing : bool, optional
+            Enable testing mode, by default False
+        """
         self._ham = Hamiltonian
         self._proj = self._ham.get_proj()
         self._grid = Grid.get_grid(Grid._symmetry)
@@ -48,21 +93,18 @@ class ResonanceFields:
 
     def get_res_fields(self) -> list[np.array, np.array, np.array, np.array]:
         """
-        Get the resonance fields.
+        Calculate resonance fields for all grid points.
 
         Returns
         -------
-        res_fields : np.array, (N,)
-            Resonance fields.
-        intensities : np.array, (N,)
-            Intensity of the transition.
-        width : np.array, (N,)
-            Gaussian linewidth.
-        transition : np.array, (N, 2)
-            Level indices for each transition. [0, 1] represents the transition
-            from the lowest level to the second lowest. [1, 0] the opposite
-            direction.
-
+        res_fields_t : list of np.array
+            Resonance fields for each grid point
+        intensities_t : list of np.array
+            Intensities for each transition
+        widths_t : list of np.array
+            Linewidths for each transition
+        transition_t : list of np.array
+            Transition indices for each transition
         """
         res_fields_t, intensities_t, widths_t, transition_t = [], [], [], []
         if not hasattr(self, "_transitions"):
@@ -83,17 +125,17 @@ class ResonanceFields:
 
     def res_field_plot(self, point: int) -> None:
         """
-        Plot the levels diagram and mark each resonance field.
+        Plot energy level diagram with resonance fields.
 
         Parameters
         ----------
         point : int
-            Orientation index used for the grid point.
+            Grid point index to plot
 
         Returns
         -------
-        None.
-
+        tuple
+            (res_fields, intensities, transition, energy_levels, field)
         """
         _, theta, phi = self._grid[point]
         energy_levels, pop, trans_prob = self._adaptive_spline(theta, phi)
@@ -139,23 +181,14 @@ class ResonanceFields:
 
     def levels_plot(self, point: int, bisections: bool = False) -> None:
         """
-        Plot the energy levels.
-
-        The linewidth corresponds to the population of the energy level. Dashed
-        lines show unpopulated levels.
+        Plot energy levels with population indication.
 
         Parameters
         ----------
         point : int
-            Orientation index used for the grid point.
+            Grid point index to plot
         bisections : bool, optional
-            If True, the field points used for the iterative bisection
-            algorithm will be plotted as vertical lines. The default is False.
-
-        Returns
-        -------
-        None
-
+            Show bisection points, by default False
         """
         _, theta, phi = self._grid[point]
         energy_levels, pop, trans_prob = self._adaptive_spline(theta, phi)
@@ -184,7 +217,13 @@ class ResonanceFields:
 
     def _get_transitions(self):
         # TODO: Ordentlich machen
-        """Get all transition indices."""
+        """
+        Calculate transition indices for all grid points.
+
+        Notes
+        -----
+        Sets self._transitions attribute.
+        """
         field = np.array([(self._field.min() + self._field.max()) / 2])
 
         for i in range(self._grid.shape[0]):
@@ -228,18 +267,23 @@ class ResonanceFields:
 
     def _get_single_res_fields(self, grid_point: int) -> np.array:
         """
-        Get the resonance fields for one grid point.
+        Calculate resonance fields for a single grid point.
 
         Parameters
         ----------
         grid_point : int
-            Index of the angles in self._grid.
+            Index of the grid point
 
         Returns
         -------
-        res_fields : np.array, (N, 4)
-            Resonance fields for one angle on the sphere.
-
+        res_fields : np.array
+            Resonance fields for the grid point
+        intensities : np.array
+            Intensities for each transition
+        widths : np.array
+            Linewidths for each transition
+        transition : np.array
+            Transition indices for each transition
         """
         _, theta, phi = self._grid[grid_point]
         self._grid_point = grid_point
@@ -282,22 +326,23 @@ class ResonanceFields:
         self, delta_splines: CubicHermiteSpline, transitions: np.array
     ) -> np.array:
         """
-        Get the resonance fields for each possible transition.
+        Find resonance fields for all transitions.
 
         Parameters
         ----------
         delta_splines : CubicHermiteSpline
-            Spline representation of the energy difference between levels.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Energy difference splines
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        res_fields : np.array, (N,)
-            Resonance field for each transition.
-        transition : np.array, (N, 2)
-            Indices for each transition.
-
+        res_fields : np.array
+            Resonance fields for each transition
+        delta_splines : CubicHermiteSpline
+            Updated energy difference splines
+        transitions : np.array
+            Updated transition indices
         """
         fields_1 = delta_splines.solve(self._nu)
         fields_2 = delta_splines.solve(-self._nu)
@@ -331,26 +376,23 @@ class ResonanceFields:
         self, theta: float, phi: float
     ) -> list[CubicHermiteSpline, object, object, object]:
         """
-        Get a cubic spline representation for each energy level.
-
-        This function uses the adaptive bisection algorithm.
+        Calculate energy levels using adaptive spline interpolation.
 
         Parameters
         ----------
         theta : float
-            Angle in radian. Used for the setup of the hamiltonian.
+            Theta angle
         phi : float
-            Angle in radian. Used for the setup of the hamiltonian.
+            Phi angle
 
         Returns
         -------
-        CubicHermiteSpline
-            Spline representation of the energy levels.
-        object
-            Linear interpolator for the populations.
-        object
-            Linear interpolator for the transition probabilities.
-
+        energy_levels : CubicHermiteSpline
+            Energy level splines
+        population : object
+            Population interpolator
+        trans_prob : object
+            Transition probability interpolator
         """
         min_field, max_field = self._field.min(), self._field.max()
         points = np.array([min_field, max_field])
@@ -408,21 +450,19 @@ class ResonanceFields:
 
     def _get_segments(self, knots: np.array, converged: np.array) -> np.array:
         """
-        Get the non converged segments for the next iteration step.
+        Get non-converged segments for next iteration.
 
         Parameters
         ----------
-        knots : np.array, (M, N, 3)
-            Calculated knots with their energies and gradients.
-        converged : np.array, (M-1)
-            Indicates which segment is converged. converged[i] correspondends
-            to the segment [knots[i], knots[i+1]].
+        knots : np.array
+            Energy level data points
+        converged : np.array
+            Convergence flags
 
         Returns
         -------
-        segments : np.array, (A, N, 2, 3)
-            Non converged segments.
-
+        np.array
+            Non-converged segments
         """
         offset = np.where(~converged)[0].min()
         needed = ~converged[offset:]
@@ -453,25 +493,23 @@ class ResonanceFields:
         self, field: np.array, theta: float, phi: float
     ) -> list[np.array, tuple[np.array, np.array]]:
         """
-        Get the energies and gradients for the given field points.
+        Calculate energies and gradients for field points.
 
         Parameters
         ----------
-        field : np.array, (N,)
-            Field points.
-        theta : np.array, float
-            Angle on the grid.
-        phi : np.array, phi
-            Angle on the grid.
+        field : np.array
+            Field points
+        theta : float
+            Theta angle
+        phi : float
+            Phi angle
 
         Returns
         -------
-        knots : np.array, (N, M, 3)
-            Calculated knots with their energies and gradients.
-        eigenvector : tuple, (np.array, np.array)
-            Field points and corresponding eigenvector matrices from
-            np.linalg.eigh().
-
+        knots : np.array
+            Energy level data points
+        eigenvector : tuple
+            (field points, eigenvector matrices)
         """
         size = field.size
         theta = np.full(size, theta)
@@ -492,26 +530,24 @@ class ResonanceFields:
 
     def _get_error_estimation(self, segment: np.array, center: np.array) -> bool:
         r"""
-        Get the error estimation for the splines in the current segment.
+        Estimate error for spline approximation.
 
         .. math::
 
-            \tilde{\delta}_B = \max_u \lvert \frac{E_u(B_3)-\tilde{E}_u(B_3)}
-            {\delta E_u(B_3) /\delta B}\rvert
+           \tilde{\delta}_B = \max_u \left| \frac{E_u(B_3)-\tilde{E}_u(B_3)}
+           {\delta E_u(B_3) /\delta B}\right|
 
         Parameters
         ----------
         segment : np.array
-            Start and end points of the local spline [B1, B2] with their
-            energies and gradients.
+            Spline segment data
         center : np.array
-            Exact energies and gradients at the center of the segment.
+            Exact center values
 
         Returns
         -------
         bool
-            True if the error is lower/equal than \tau_B.
-
+            True if error is within tolerance
         """
         delta_B = segment[:, :, 1, 0] - segment[:, :, 0, 0]
         sum_E = segment[:, :, 0, 1] + segment[:, :, 1, 1]
@@ -522,18 +558,17 @@ class ResonanceFields:
 
     def _get_splines(self, knots: np.array) -> object:
         """
-        Get the splines for each energy level as a CubicHermiteSpline object.
+        Create cubic spline interpolators for energy levels.
 
         Parameters
         ----------
-        knots : np.array, (M, N, 3)
-            Calculated knots with their energies and gradients.
+        knots : np.array
+            Energy level data points
 
         Returns
         -------
-        object
-            scipy.interpolate.CubicHermiteSpline object.
-
+        CubicHermiteSpline
+            Energy level splines
         """
         knots = knots[knots[:, 0, 0].argsort()]  # sort along field axis
         field = knots[:, 0, 0]
@@ -547,20 +582,19 @@ class ResonanceFields:
 
     def _get_eigvec_interp(self, field: np.array, eigvecs: np.array) -> object:
         """
-        Get the linear interpolator for all eigenvectors.
+        Create eigenvector interpolator (deprecated).
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field points.
-        eigvecs : np.array, (M, M)
-            Corresponding eigenvectors.
+        field : np.array
+            Field points
+        eigvecs : np.array
+            Eigenvectors
 
         Returns
         -------
         object
-            Linear interpolator.
-
+            Linear interpolator
         """
         warn(
             "This function is deprecated due to errors!",
@@ -571,39 +605,37 @@ class ResonanceFields:
 
     def _get_trans_prob_interp(self, field: np.array, trans_prob: np.array) -> object:
         """
-        Interpolate the transition probability along the field axis.
+        Create transition probability interpolator.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field points.
-        trans_prob : np.array, (M, N, N)
-            Corresponding transition probabilities.
+        field : np.array
+            Field points
+        trans_prob : np.array
+            Transition probabilities
 
         Returns
         -------
         object
-            Linear interpolator for the populations of each energy level.
-
+            Linear interpolator
         """
         return interp1d(field, trans_prob, axis=0, fill_value="extrapolate")
 
     def _get_pop_interp(self, field: np.array, eigvecs: np.array) -> object:
         """
-        Interpolate the populations along the field axis.
+        Create population interpolator.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Magnetic field points.
-        eigvecs : np.array, (M, M)
-            Corresponding eigenvectors.
+        field : np.array
+            Field points
+        eigvecs : np.array
+            Eigenvectors
 
         Returns
         -------
         object
-            Linear interpolator for the populations of each energy level.
-
+            Linear interpolator
         """
         eigvecs_T = np.einsum("aij -> aji", eigvecs)
         eigvecs_inv = np.linalg.inv(eigvecs_T)
@@ -618,18 +650,17 @@ class ResonanceFields:
 
     def _get_new_centers(self, segments: np.array) -> np.array:
         """
-        Get the new center fields of the non converged segments.
+        Calculate new center points for non-converged segments.
 
         Parameters
         ----------
-        segments : np.array, (A, N, 2, 3)
-            Non converged segments.
+        segments : np.array
+            Non-converged segments
 
         Returns
         -------
-        centers : np.array, (A,)
-            New field points.
-
+        np.array
+            New center points
         """
         centers = (segments[:, 0, 1, 0] + segments[:, 0, 0, 0]) / 2
         return centers
@@ -638,22 +669,21 @@ class ResonanceFields:
         self, centers: np.array, new_centers: np.array, converged: np.array
     ) -> np.array:
         """
-        Get all converged centers out of the old and new centers.
+        Get converged center points.
 
         Parameters
         ----------
-        centers : np.array, (A, N, 3)
-            Converged centers  with their energies and gradients.
+        centers : np.array
+            Previous centers
         new_centers : np.array
-            Calculated centers with their energies and gradients.
+            New center points
         converged : np.array
-            Indicates which segment/new_center is converged.
+            Convergence flags
 
         Returns
         -------
-        centers : np.array, (B, N, 3)
-            Converged centers with their energies and gradients.
-
+        np.array
+            Updated center points
         """
         if centers.size == 0:
             return new_centers[converged]
@@ -669,29 +699,25 @@ class ResonanceFields:
         converged: np.array,
     ) -> list[np.array, np.array]:
         """
-        Get all needed knots for the next iteration step.
-
-        Add the removed knots to the centers.
+        Prepare knots for next iteration.
 
         Parameters
         ----------
-        knots : np.array, (A, N, 3)
-            Calculated knots with their energies and gradients.
-        centers : np.array, (C, N, 3)
-            Converged centers  with their energies and gradients.
+        knots : np.array
+            Current knots
+        centers : np.array
+            Converged centers
         new_centers : np.array
-            Calculated centers with their energies and gradients.
+            New center points
         converged : np.array
-            Indicates which segment/new_center is converged.
+            Convergence flags
 
         Returns
         -------
-        knots : np.array, (B, N, 3)
-            Calculated knots with their energies and gradients.
-
-        centers : np.array, (D, N, 3)
-            Converged centers with their energies and gradients.
-
+        knots : np.array
+            Updated knots
+        centers : np.array
+            Updated centers
         """
         needed = new_centers[~converged]
         k = []
@@ -727,23 +753,17 @@ class ResonanceFields:
 
     def _get_transition_probabilities(self, eigvecs: np.array) -> np.array:
         """
-        Get the transition probabilties matrix.
-
-        The matrix contains the transitions probabilities for each eigenvector
-        combination. The probability for the transition eigenvector[i] ->
-        eigenvector[j] is the element [i, j] of the  matrix. Due to symmetry,
-        only the lower triangle is returned.
+        Calculate transition probabilities.
 
         Parameters
         ----------
-        eigvecs : np.array, (N, M, M)
-            Eigenvector matrices returned by e. g. np.linalg.eigh().
+        eigvecs : np.array
+            Eigenvector matrices
 
         Returns
         -------
-        trans_prob : np.array, (N, M, M)
-            Transition probabilities.
-
+        np.array
+            Transition probabilities
         """
         eigvecs_T = np.einsum("aij -> aji", eigvecs)
         trans_prob = np.empty(eigvecs.shape)
@@ -769,25 +789,23 @@ class ResonanceFields:
         transitions: np.array,
     ) -> np.array:
         """
-        Calculate the intensities for the given resonance fields.
+        Calculate transition intensities.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Resonance field for each transition.
+        field : np.array
+            Resonance fields
         trans_prob : object
-            Linear interpolator for the transition probabilities.
+            Transition probability interpolator
         population : object
-            Linear interpolator for the populations of each energy level along
-            the field axis.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Population interpolator
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        intensities : np.array, (M,)
-            Peak intensity at the resonance field for each transition.
-
+        np.array
+            Transition intensities
         """
         delta_pop = self._get_delta_pop(field, population, transitions)
         trans = trans_prob(field)
@@ -801,23 +819,21 @@ class ResonanceFields:
         self, field: np.array, population: object, transitions: np.array
     ) -> np.array:
         """
-        Get the population differences for each transition.
+        Calculate population differences for transitions.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Resonance field for each transition.
+        field : np.array
+            Resonance fields
         population : object
-            Linear interpolator for the populations of each energy level along
-            the field axis.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Population interpolator
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        np.array, (M,)
-            Population difference for each transition.
-
+        np.array
+            Population differences
         """
         pops = population(field)
         i = range(field.size)
@@ -828,23 +844,21 @@ class ResonanceFields:
         self, trans_prob: object, population: object, transitions: np.array
     ) -> np.array:
         """
-        Filter the transitions by their transition rates at B_center.
+        Filter transitions at center field.
 
         Parameters
         ----------
         trans_prob : object
-            Interpolator for the transition probabilities.
+            Transition probability interpolator
         population : object
-            Linear interpolator for the populations of each energy level along
-            the field axis.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Population interpolator
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        transitions : np.array, (N, 2)
-            Indices for each transition.
-
+        np.array
+            Filtered transitions
         """
         B_center = np.ones(transitions.shape[0]) * (
             (self._field.min() + self._field.max()) / 2
@@ -870,30 +884,29 @@ class ResonanceFields:
         transitions: np.array,
     ) -> list[np.array, np.array, np.array]:
         """
-        Filter transitions by their intensity.
+        Filter transitions by intensity.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Resonance field for each transition.
-        intensities : np.array, (M,)
-            Peak intensity at the resonance field for each transition.
+        field : np.array
+            Resonance fields
+        intensities : np.array
+            Transition intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Energy difference splines
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        field : np.array, (N,)
-            Resonance field for each transition.
-        intensities : np.array, (N,)
-            Peak intensity at the resonance field for each transition.
+        field : np.array
+            Filtered fields
+        intensities : np.array
+            Filtered intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : np.array, (N, 2)
-            Indices for each transition.
-
+            Updated splines
+        transitions : np.array
+            Filtered transitions
         """
         idx = abs(intensities) > self._int_trshld
         delta_E.c = delta_E.c[:, :, idx]
@@ -908,30 +921,29 @@ class ResonanceFields:
     ) -> list[np.array, np.array, np.array]:
         # TODO: max_spread einführen!
         """
-        Filter transitions by their field position.
+        Filter transitions by position.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Resonance field for each transition.
-        intensities : np.array, (M,)
-            Peak intensity at the resonance field for each transition.
+        field : np.array
+            Resonance fields
+        intensities : np.array
+            Transition intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : np.array, (M, 2)
-            Indices for each transition.
+            Energy difference splines
+        transitions : np.array
+            Transition indices
 
         Returns
         -------
-        field : np.array, (N,)
-            Resonance field for each transition.
-        intensities : np.array, (N,)
-            Peak intensity at the resonance field for each transition.
+        field : np.array
+            Filtered fields
+        intensities : np.array
+            Filtered intensities
         delta_E : CubicHermiteSpline
-            Delta spline functions.
-        transitions : np.array, (N, 2)
-            Indices for each transition.
-
+            Updated splines
+        transitions : np.array
+            Filtered transitions
         """
         max_spread = 0.5 * 3
         if not self._testing:  # TODO
@@ -975,20 +987,19 @@ class ResonanceFields:
 
     def _get_linewidths(self, field: np.array, delta_E: CubicHermiteSpline) -> np.array:
         """
-        Calculate the gaussian linewidth for each resonance field.
+        Calculate linewidths for transitions.
 
         Parameters
         ----------
-        field : np.array, (M,)
-            Resonance field for each transition.
+        field : np.array
+            Resonance fields
         delta_E : CubicHermiteSpline
-            Delta spline functions.
+            Energy difference splines
 
         Returns
         -------
-        linewidths : np.array, (M,)
-            Linewidth for each resonance field.
-
+        np.array
+            Linewidths for each transition
         """
         linewidths = 1 / np.diag(delta_E.derivative()(field))
         return linewidths
