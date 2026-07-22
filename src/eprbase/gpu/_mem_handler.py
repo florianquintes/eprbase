@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-© M. Sc. Florian Quintes, 2021-2022.
+Memory management utilities for GPU-accelerated EPR simulations.
 
-@contact: florian.quintes@pc.uni.freiburg.de
-
-@author: Florian Quintes
+This module provides functions to determine optimal chunk sizes for memory-efficient
+computation on GPU devices, using NVIDIA Management Library (NVML) for memory queries.
 """
 
 from pynvml import (
@@ -19,23 +18,26 @@ import math
 
 def get_chunks(needed: int, max_use: float = 0.8, device: int = 0) -> int:
     """
-    Get the number of chunks.
+    Calculate the number of chunks needed for memory-efficient computation.
 
     Parameters
     ----------
     needed : int
-        Maximum needed number of bytes for the computation.
+        Total memory requirement in bytes for the computation.
     max_use : float, optional
-        Fraction of the available memory which will be used. (0., 1.]. The
-        default is 0.8.
+        Fraction of available GPU memory to use (0.0, 1.0]. Default is 0.8.
     device : int, optional
-        Device number. Only needed for multiple GPU setup. The default is 0.
+        GPU device index. Default is 0.
 
     Returns
     -------
     int
-        Number of chunks.
+        Number of chunks required to stay within memory limits.
 
+    Raises
+    ------
+    ValueError
+        If max_use is not in the range (0.0, 1.0].
     """
     if max_use <= 0.0 or max_use > 1.0:
         raise ValueError("max_use needs to be in (0., 1.].")
@@ -47,21 +49,19 @@ def get_chunks(needed: int, max_use: float = 0.8, device: int = 0) -> int:
 
 def get_chunksize(n_chunks: int, arr_size: int) -> int:
     """
-    Get the size of one chunk.
+    Calculate the size of each computation chunk.
 
     Parameters
     ----------
     n_chunks : int
-        Number of chunks.
+        Total number of chunks.
     arr_size : int
-        Size of the dimension at which the array will be sliced for chunked
-        computation.
+        Size of the dimension to be split for chunked computation.
 
     Returns
     -------
     int
-        Chunksize used for slicing.
-
+        Size of each chunk for memory-efficient processing.
     """
     return math.floor(arr_size / n_chunks)
 
@@ -73,13 +73,12 @@ def _get_available_memory(device: int = 0) -> int:
     Parameters
     ----------
     device : int, optional
-        Device number. Only needed for multiple GPU setup. The default is 0.
+        GPU device index. Default is 0.
 
     Returns
     -------
     int
-        Number of  free bytes.
-
+        Number of free bytes available on the specified GPU.
     """
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(device)
