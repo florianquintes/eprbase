@@ -8,11 +8,11 @@
 @author: Florian Quintes
 """
 
-from scipy.interpolate import interp1d, PPoly  # Ersetzen
+from scipy.interpolate import PPoly  # Ersetzen
 from copy import deepcopy
 import numpy as np
 import cupy as cp
-from cupyx.scipy.interpolate import CubicHermiteSpline
+from cupyx.scipy.interpolate import CubicHermiteSpline, interp1d
 import matplotlib.pyplot as plt
 from scipy.constants import physical_constants
 from time import time
@@ -436,8 +436,7 @@ class ResonanceFields:
             Linear interpolator for the populations of each energy level.
 
         """
-        # TODO: interp1d ersetzen zu CuPy
-        return interp1d(field.get(), trans_prob.get(), axis=0, fill_value="extrapolate")
+        return interp1d(field, trans_prob, axis=0, fill_value="extrapolate")
 
     def _get_pop_interp(self, field: cp.array, eigvecs: cp.array) -> object:
         """
@@ -465,8 +464,7 @@ class ResonanceFields:
 
         pop = cp.einsum("ajj -> aj", pop).real
 
-        # TODO: interp1d ersetzen zu CuPy
-        return interp1d(field.get(), pop.get(), axis=0, fill_value="extrapolate")
+        return interp1d(field, pop, axis=0, fill_value="extrapolate")
 
     def _get_transition_probabilities(self, eigvecs: cp.array) -> cp.array:
         """
@@ -535,9 +533,7 @@ class ResonanceFields:
         """
         delta_pop = self._get_delta_pop(field, population, transitions)
 
-        # TODO: nach interp1d ersetzen zu CuPy kann cp.array und get() entfernt
-        # werden
-        trans = cp.array(trans_prob(field.get()), dtype=CUPY_FLOAT)
+        trans = trans_prob(field)
 
         i = range(transitions.shape[0])
         tp = trans[i, transitions[i, 0], transitions[i, 1]]
@@ -565,9 +561,7 @@ class ResonanceFields:
             Population difference for each transition.
 
         """
-        # TODO: nach interp1d ersetzen zu CuPy kann cp.array und get() entfernt
-        # werden
-        pops = cp.array(population(field.get()), dtype=CUPY_FLOAT)
+        pops = population(field)
         i = range(field.size)
         return pops[i, transitions[:, 0]] - pops[i, transitions[:, 1]]
 
@@ -731,8 +725,7 @@ class ResonanceFields:
         transitions = transitions[abs(delta_pop) > self._pop_trshld]
 
         # Filter by transition probability
-        # TODO: trans_prob(B_center[0]) , wenn interp1d in CuPy
-        trans_probs = cp.array(trans_prob(B_center[0].get()), dtype=CUPY_FLOAT)
+        trans_probs = trans_prob(B_center[0])
         transitions = transitions[
             trans_probs[transitions[:, 0], transitions[:, 1]] > self._trans_prob_trshld
         ]
