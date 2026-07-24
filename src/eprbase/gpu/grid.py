@@ -763,9 +763,9 @@ def spherical_to_cartesian(
 
     .. math::
 
-    x &= r\sin(\theta)\cos(\phi) \\
-    y &= r\sin(\theta)\sin(\phi) \\
-    z &= r\cos(\theta)
+        x &= r\sin(\theta)\cos(\phi) \\
+        y &= r\sin(\theta)\sin(\phi) \\
+        z &= r\cos(\theta)
 
     Parameters
     ----------
@@ -793,9 +793,9 @@ def cartesian_to_spherical(x: cp.array, y: cp.array, z: cp.array) -> cp.array:
 
     .. math::
 
-    r &= \sqrt{x^2 + y^2 + z^2} \\
-    \theta &= \arccos\left(\frac{z}{r}\right) \\
-    \phi &= \arctan2(y, x)
+        r &= \sqrt{x^2 + y^2 + z^2} \\
+        \theta &= \arccos\left(\frac{z}{r}\right) \\
+        \phi &= \arctan2(y, x)
 
     Parameters
     ----------

@@ -1,7 +1,13 @@
 import sys
+import tomllib
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+project_root = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(project_root / "src"))
+
+with (project_root / "pyproject.toml").open("rb") as file:
+    pyproject = tomllib.load(file)
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -14,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 project = "eprbase"
 copyright = "2026, Florian Quintes"
 author = "Florian Quintes"
-release = "0.1.0"
+release = pyproject["project"]["version"]
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -27,6 +33,8 @@ extensions = [
     "sphinx_copybutton",
     "myst_parser",
 ]
+
+autodoc_mock_imports = ["cupy", "cupyx", "pynvml"]
 
 templates_path = ["_templates"]
 exclude_patterns = []
