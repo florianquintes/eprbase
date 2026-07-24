@@ -2,7 +2,7 @@ name: Documentation
 
 on:
   push:
-    -branches:
+    branches:
       - main
       - develop
   workflow_dispatch:
@@ -42,8 +42,8 @@ jobs:
           find . -maxdepth 3 -type f | sort
 
       - name: Build documentation
-      	env:
-      		SPHINX_BUILD: "1"
+        env:
+          SPHINX_BUILD: "1"
         run: uv run sphinx-build -b html docs/source docs/build/html
 
       - name: Upload Pages artifact
