@@ -34,7 +34,7 @@ extensions = [
     "myst_parser",
 ]
 
-autodoc_mock_imports = ["cupy", "cupyx"]
+autodoc_mock_imports = ["cupy", "cupyx", "pynvml"]
 
 templates_path = ["_templates"]
 exclude_patterns = []
