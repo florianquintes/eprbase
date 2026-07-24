@@ -7,6 +7,9 @@
 
 @author: Florian Quintes
 """
+import os
+
+IS_DOC_BUILD = os.getenv("SPHINX_BUILD") == "1"
 
 try:
     import cupy as cp
@@ -18,7 +21,8 @@ except ImportError as error:
 try:
     device_count = cp.cuda.runtime.getDeviceCount()
 except cp.cuda.runtime.CUDARuntimeError as error:
-    raise RuntimeError("Keine funktionsfähige CUDA-GPU gefunden.") from error
+	if not IS_DOC_BUILD:
+    	raise RuntimeError("Keine funktionsfähige CUDA-GPU gefunden.") from error
 
-if device_count == 0:
+if device_count == 0 and not IS_DOC_BUILD:
     raise RuntimeError("Keine CUDA-GPU verfügbar.")
